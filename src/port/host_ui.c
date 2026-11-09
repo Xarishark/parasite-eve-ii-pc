@@ -372,7 +372,7 @@ static void paintPanel(OverlaySurface* surface,OverlayLayout* layout) {
     float s=layout->scale;
     FillRoundRect(surface,0,0,680*s,(surface->h-1),16*s,kPanel);
     DrawText(surface,32*s,42*s,24*s,"PARASITE EVE II",kText,ALIGN_LEFT);
-    DrawText(surface,648*s,42*s,14*s,"0.3.1 alpha",kMuted,ALIGN_RIGHT);
+    DrawText(surface,648*s,42*s,14*s,"0.3.2 alpha",kMuted,ALIGN_RIGHT);
     for(int i=0;i<4;i++)DrawText(surface,(32+i*161)*s,87*s,17*s,pages[i],
         s_overlayState.page==i?kAccent:kMuted,ALIGN_LEFT);
     ensureRowVisible();

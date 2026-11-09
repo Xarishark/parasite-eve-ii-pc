@@ -11,7 +11,7 @@ PlayStation runtime library (Psy-Q) on top of SDL3. It follows the architecture 
 
 ## Status
 
-**Pre-alpha.** The [0.3.1-alpha release](https://github.com/khasinski/parasite-eve-ii-pc/releases/tag/0.3.1) has downloads for macOS (Apple silicon, signed and notarized), Linux (x86-64 and ARM64) and Windows (experimental), plus a save editor. The game boots from your disc images and plays the
+**Pre-alpha.** The [0.3.2-alpha release](https://github.com/khasinski/parasite-eve-ii-pc/releases/tag/0.3.2) has downloads for macOS (Apple silicon, signed and notarized), Linux (x86-64 and ARM64) and Windows (experimental), plus a save editor. The game boots from your disc images and plays the
 opening movie, the title screen and New Game. Recorded New Game input reaches the Acropolis helicopter landing pad,
 including No. 9 combat and transformer damage. Native gameplay and save/reload have since been exercised through Dryfield and into the Shelter Laboratory on macOS; later story progression remains unverified.
 

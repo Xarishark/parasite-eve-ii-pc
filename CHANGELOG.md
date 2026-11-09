@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2
+
+- Fix saving and loading on Windows: every save failed with "Failed to access MEMORY CARD." because the Windows C runtime headers changed the memory-card open modes the game passes, so the port refused to open a save for writing and treated reads as writes. macOS and Linux were not affected.
+
 ## 0.3.1
 
 - Fix saving on every platform: about one save in ten failed with "Failed to access MEMORY CARD." because the game's random save name can contain ':', which the port rejected (Windows does not allow it in file names). Such names are now stored with '!' on disk. Memory-card errors are written to the log, and on Windows a save that an antivirus scan holds up is retried.
