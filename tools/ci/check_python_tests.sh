@@ -4,5 +4,7 @@
 # it drives. Run from the repository root.
 set -e
 if [ -f venv/bin/python3 ]; then PY=venv/bin/python3; else PY=python3; fi
-cmake --build "${1:-build-port}" --target hd_native_decode --parallel
+test_build=${1:-build-port}
+cmake --build "$test_build" --target hd_native_decode --parallel
+export PE2_HD_TEST_DECODER="$(cd "$test_build" && pwd)/hd_native_decode"
 PYTHONPATH=tools/hd "$PY" -m unittest discover -s tests -p 'hd_*_test.py' -v

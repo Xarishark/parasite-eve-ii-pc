@@ -9,7 +9,7 @@ import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools/peassets'))
 from bs_codec import encode_bs_v2
 
-DECODER=Path('build-port/hd_native_decode').resolve()
+DECODER=Path(os.environ.get('PE2_HD_TEST_DECODER', 'build-port/hd_native_decode')).resolve()
 
 class DecodeTest(unittest.TestCase):
     def test_exact_gray_values_and_column_to_row_layout(self):

@@ -181,5 +181,15 @@ jobs:
         run: python3 -m compileall -q tools
       - name: Python dependencies
         run: pip install --quiet -r requirements.txt
+      - name: Fetch PsyZ and SDL for the native decoder
+        run: |
+          git submodule update --init third_party/psyz
+          git -C third_party/psyz submodule update --init external/SDL
+      - name: Configure the headless native decoder
+        run: >-
+          cmake -S . -B build-python-tests -DPE_BUILD_GAME=OFF
+          -DSDL_X11=OFF -DSDL_WAYLAND=OFF -DSDL_KMSDRM=OFF
+          -DSDL_ALSA=OFF -DSDL_PULSEAUDIO=OFF -DSDL_PIPEWIRE=OFF
+          -DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_VULKAN=OFF
       - name: Tool regressions
         run: tools/ci/check_python_tests.sh build-python-tests
