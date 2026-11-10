@@ -7,6 +7,10 @@ extern long cln(long);
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "line %d: %s\n", __LINE__, #x); exit(1); } } while (0)
 _Alignas(void*) u8 gHostScratchpad[0x400];
 s32 gWorldCollisionSurfacePushbackSuppression[8];
+/* ASan retains the production list-head tables, even though this fixture
+ * exercises only tagged floor contacts. Keep their external heads real. */
+WorldCollisionOccluder* gWorldCollisionOccluderListHead;
+WorldCollisionTrigger* gWorldCollisionViewBoundaryListHead;
 void Psyz_PadsOverride(int p, char* f, int n) { (void)p; (void)f; (void)n; }
 int main(void)
 {

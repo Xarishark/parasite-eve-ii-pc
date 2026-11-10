@@ -1,6 +1,6 @@
 /* The production red flash must fill exactly one packed RGB555 frame. */
 #include "port/gpu_len.h"
-#include "../src/aya/game_over/game_over.c"
+#include "../src/shared/scene/game_over_image.inc.c"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

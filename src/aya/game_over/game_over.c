@@ -60,22 +60,7 @@ enum {
 /// Writes all 320 by 240 pixels, with the mask bit clear. The caller must
 /// finish decoding or capturing before overwriting the shared workspace;
 /// this does not upload the strips or select them as the display source.
-static inline void _gameOverFillRedImage(void)
-{
-    enum { GAME_OVER_RED_FLASH_PIXEL = 0x001F };
-    u32* imageWords;
-    u16  wordIndex;
-    u32  redPixelPair;
-
-    // Two RGB555 pixels occupy each word; all twenty strips are contiguous.
-    imageWords   = gFsImageWorkspacePtr->strips[0];
-    redPixelPair = (GAME_OVER_RED_FLASH_PIXEL << 16) | GAME_OVER_RED_FLASH_PIXEL;
-    wordIndex    = 0;
-    do {
-        *imageWords++ = redPixelPair;
-        wordIndex++;
-    } while ((u32)wordIndex <= ARRAY_SIZE(gFsImageWorkspacePtr->strips) * ARRAY_SIZE(gFsImageWorkspacePtr->strips[0]) - 1);
-}
+#include "../../shared/scene/game_over_image.inc.c"
 
 /// Replaces the image strips with red beneath a fading additive white flash.
 ///
