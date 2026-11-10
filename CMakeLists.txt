@@ -4,6 +4,8 @@ if(CMAKE_HOST_APPLE AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET
     set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "Minimum supported macOS version")
 endif()
 project(parasite-eve-ii-pc VERSION 0.2.0 LANGUAGES C)
+# Host cast audits and local tooling consume this on fresh build trees too.
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Overlay packages and their variants define the same uninitialised globals in several objects. Apple's toolchain merges
 # those tentative definitions into one; GCC and Clang elsewhere need -fcommon to do the same, or the link fails with
