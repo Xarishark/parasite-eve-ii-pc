@@ -9,7 +9,9 @@
 #include <string.h>
 #include <inttypes.h>
 void Psyz_PadsOverride(int port,char* frame,int length) {(void)port;(void)frame;(void)length;}
-static DECDCTTAB table;
+/* DecDCTvlcBuild emits the game's 0x11000-byte VLC2 table, larger than
+ * the SDK DECDCTTAB intended for the earlier VLC decoder. */
+static u_short table[0x11000 / sizeof(u_short)];
 static uint16_t columns[320*240],rows[320*240];
 int main(int argc,char** argv)
 {

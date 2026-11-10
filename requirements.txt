@@ -3,3 +3,4 @@ numpy
 pillow
 usd-core
 libclang
+opencv-python-headless
