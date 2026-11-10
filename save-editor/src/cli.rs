@@ -22,42 +22,76 @@ pub enum Command {
     /// Show one slot's contents (add --verbose for all typed fields).
     Inspect {
         path: PathBuf,
-        #[arg(long)] slot: Option<usize>,
-        #[arg(long)] verbose: bool,
+        #[arg(long)]
+        slot: Option<usize>,
+        #[arg(long)]
+        verbose: bool,
     },
     /// Verify every live checksum of one slot.
-    Verify { path: PathBuf, #[arg(long)] slot: Option<usize> },
+    Verify {
+        path: PathBuf,
+        #[arg(long)]
+        slot: Option<usize>,
+    },
     /// Edit typed fields of one slot; unknown bytes are preserved.
     Edit(EditArgs),
     /// Export one slot's typed fields as JSON.
-    Export { path: PathBuf, #[arg(long)] slot: Option<usize>, #[arg(long)] out: PathBuf },
+    Export {
+        path: PathBuf,
+        #[arg(long)]
+        slot: Option<usize>,
+        #[arg(long)]
+        out: PathBuf,
+    },
     /// Apply a JSON transfer onto one slot (None fields are skipped).
-    Import { path: PathBuf, #[arg(long)] slot: Option<usize>, #[arg(long)] input: PathBuf },
+    Import {
+        path: PathBuf,
+        #[arg(long)]
+        slot: Option<usize>,
+        #[arg(long)]
+        input: PathBuf,
+    },
     /// Export one slot's raw 0x2000-byte file.
-    Extract { path: PathBuf, #[arg(long)] slot: Option<usize>, #[arg(long)] out: PathBuf },
+    Extract {
+        path: PathBuf,
+        #[arg(long)]
+        slot: Option<usize>,
+        #[arg(long)]
+        out: PathBuf,
+    },
 }
 
 #[derive(Args)]
 pub struct EditArgs {
     pub path: PathBuf,
-    #[arg(long)] slot: Option<usize>,
+    #[arg(long)]
+    slot: Option<usize>,
     /// Field=value pairs; run `edit --help-fields` style listing via `fields`.
-    #[arg(long = "set")] sets: Vec<String>,
+    #[arg(long = "set")]
+    sets: Vec<String>,
     /// Print the supported field names instead of editing.
-    #[arg(long)] fields: bool,
+    #[arg(long)]
+    fields: bool,
 }
 
-fn resolve_slot(container: &CardContainer, slot: Option<usize>) -> Result<(usize, crate::card::SlotFile)> {
+fn resolve_slot(
+    container: &CardContainer,
+    slot: Option<usize>,
+) -> Result<(usize, crate::card::SlotFile)> {
     let slots = container.slots();
     if slots.is_empty() {
         bail!("no PE2 save files found");
     }
     let available: Vec<usize> = slots.iter().map(|(i, _)| *i).collect();
     match slot {
-        Some(index) => slots.into_iter().find(|(i, _)| *i == index)
-            .ok_or_else(|| anyhow::anyhow!("slot {} not found (available: {:?})", index, available)),
+        Some(index) => slots.into_iter().find(|(i, _)| *i == index).ok_or_else(|| {
+            anyhow::anyhow!("slot {} not found (available: {:?})", index, available)
+        }),
         None if slots.len() == 1 => Ok(slots.into_iter().next().unwrap()),
-        None => bail!("multiple slots found; pass --slot (available: {:?})", available),
+        None => bail!(
+            "multiple slots found; pass --slot (available: {:?})",
+            available
+        ),
     }
 }
 
@@ -107,31 +141,70 @@ pub fn run(cli: Cli) -> Result<()> {
                 let data = SlotData::from_bytes(file.data.clone())?;
                 let save = data.save()?;
                 let (sections, header, summary) = data.verify();
-                let status = if sections.iter().all(|ok| *ok) && header && summary { "OK" } else { "CHECKSUM MISMATCH" };
-                println!("[{}] {} — {} [{}]", index, file.filename, describe(&save), status);
+                let status = if sections.iter().all(|ok| *ok) && header && summary {
+                    "OK"
+                } else {
+                    "CHECKSUM MISMATCH"
+                };
+                println!(
+                    "[{}] {} — {} [{}]",
+                    index,
+                    file.filename,
+                    describe(&save),
+                    status
+                );
             }
         }
-        Command::Inspect { path, slot, verbose } => {
+        Command::Inspect {
+            path,
+            slot,
+            verbose,
+        } => {
             let (_, index, data) = open_slot(&path, slot)?;
             let save = data.save()?;
             println!("slot {}", index);
             println!("{}", describe(&save));
             let range = save.carried_range();
-            println!("carried items: {} in rows {}..{}", carried_item_count(&save), range.first_row, range.first_row as u16 + range.row_count as u16);
-            println!("companion: type {} variant {} hp {}/{}", save.companion_type(), save.companion_variant(), save.companion_hp(), save.companion_hp_max());
-            println!("clears {} | saves {} | shop tiers {:#x}", save.clear_count(), save.save_count(), save.shop_tiers());
+            println!(
+                "carried items: {} in rows {}..{}",
+                carried_item_count(&save),
+                range.first_row,
+                range.first_row as u16 + range.row_count as u16
+            );
+            println!(
+                "companion: type {} variant {} hp {}/{}",
+                save.companion_type(),
+                save.companion_variant(),
+                save.companion_hp(),
+                save.companion_hp_max()
+            );
+            println!(
+                "clears {} | saves {} | shop tiers {:#x}",
+                save.clear_count(),
+                save.save_count(),
+                save.shop_tiers()
+            );
             if verbose {
                 println!("options: vibration_off {} run {} layout {} mono {} music {} cursor_reset {} interlace {} cheat {}",
                     save.vibration_off(), save.run_default(), save.button_layout(), save.mono_sound(),
                     save.music_volume(), save.cursor_reset(), save.interlaced(), save.cheat_mode());
-                println!("hpBonus {} mpBonus {} maxExp {} maxBp {}", save.hp_bonus(), save.mp_bonus(), save.max_exp(), save.max_bp());
+                println!(
+                    "hpBonus {} mpBonus {} maxExp {} maxBp {}",
+                    save.hp_bonus(),
+                    save.mp_bonus(),
+                    save.max_exp(),
+                    save.max_bp()
+                );
                 println!("carried rows:");
                 for i in 0..range.row_count as usize {
                     let index = range.first_row as usize + i;
                     if index < ITEM_ROW_COUNT {
                         let row = save.item_row(index);
                         if row.item_id != 0 {
-                            println!("  row {:3}: id {:#04x} attach {:3} qty {}", index, row.item_id, row.attach_slot, row.qty);
+                            println!(
+                                "  row {:3}: id {:#04x} attach {:3} qty {}",
+                                index, row.item_id, row.attach_slot, row.qty
+                            );
                         }
                     }
                 }
@@ -139,23 +212,54 @@ pub fn run(cli: Cli) -> Result<()> {
                 for i in 0..WEAPON_LOAD_COUNT {
                     let load = save.weapon_load(i);
                     if load.primary_item_id != 0 || load.secondary_item_id != 0 {
-                        println!("  weapon {:#04x}: {:#04x} x{:<3} / {:#04x} x{}", 0x80 + i, load.primary_item_id, load.primary_qty, load.secondary_item_id, load.secondary_qty);
+                        println!(
+                            "  weapon {:#04x}: {:#04x} x{:<3} / {:#04x} x{}",
+                            0x80 + i,
+                            load.primary_item_id,
+                            load.primary_qty,
+                            load.secondary_item_id,
+                            load.secondary_qty
+                        );
                     }
                 }
-                println!("PE levels: {:?}", (0..crate::save::PE_LEVEL_COUNT).map(|i| save.pe_level(i)).collect::<Vec<_>>());
+                println!(
+                    "PE levels: {:?}",
+                    (0..crate::save::PE_LEVEL_COUNT)
+                        .map(|i| save.pe_level(i))
+                        .collect::<Vec<_>>()
+                );
             }
         }
         Command::Verify { path, slot } => {
             let (_, index, data) = open_slot(&path, slot)?;
             let (sections, header, summary) = data.verify();
-            let names = ["save", "player", "akropolis", "dryfield", "dryfield-night", "mine-shelter", "neo-ark", "nibble"];
+            let names = [
+                "save",
+                "player",
+                "akropolis",
+                "dryfield",
+                "dryfield-night",
+                "mine-shelter",
+                "neo-ark",
+                "nibble",
+            ];
             let mut all_ok = header && summary;
             for (ok, name) in sections.iter().zip(names) {
-                println!("section {:<16}: {}", name, if *ok { "OK" } else { "MISMATCH" });
+                println!(
+                    "section {:<16}: {}",
+                    name,
+                    if *ok { "OK" } else { "MISMATCH" }
+                );
                 all_ok &= *ok;
             }
-            println!("header checksum : {}", if header { "OK" } else { "MISMATCH" });
-            println!("section summary : {}", if summary { "OK" } else { "MISMATCH" });
+            println!(
+                "header checksum : {}",
+                if header { "OK" } else { "MISMATCH" }
+            );
+            println!(
+                "section summary : {}",
+                if summary { "OK" } else { "MISMATCH" }
+            );
             if !all_ok {
                 bail!("slot {} has checksum mismatches", index);
             }
@@ -169,12 +273,15 @@ pub fn run(cli: Cli) -> Result<()> {
             println!("exported to {}", out.display());
         }
         Command::Import { path, slot, input } => {
-            let json = std::fs::read_to_string(&input).with_context(|| format!("reading {}", input.display()))?;
-            let transfer: SaveTransfer = serde_json::from_str(&json).context("parsing transfer JSON")?;
+            let json = std::fs::read_to_string(&input)
+                .with_context(|| format!("reading {}", input.display()))?;
+            let transfer: SaveTransfer =
+                serde_json::from_str(&json).context("parsing transfer JSON")?;
             let (mut container, index, mut data) = open_slot(&path, slot)?;
-            data.edit(|save| save.apply_transfer(&transfer)).expect("edit cannot fail");
+            data.edit(|save| save.apply_transfer(&transfer))
+                .expect("edit cannot fail");
             container.write_slot(index, &data.data)?;
-            container.save().ok();
+            container.save_to_path(&path)?;
             println!("imported into slot {}", index);
         }
         Command::Extract { path, slot, out } => {
@@ -278,7 +385,7 @@ fn run_edit(args: EditArgs) -> Result<()> {
         }
     })?;
     container.write_slot(index, &data.data)?;
-    container.save().ok();
+    container.save_to_path(&args.path)?;
     println!("edited slot {}", index);
     Ok(())
 }

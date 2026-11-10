@@ -333,11 +333,13 @@ static void pePadControlRead(uint64_t index, char* frame, size_t length)
     --remaining;
 }
 
-/* Scripted input for automated runs: PE2_AUTOPRESS=<first tick> taps Start, then Cross, in turn (active-low bits
- * of the digital pad frame: byte 2 bit 3 = Start, byte 3 bit 6 = Cross). */
-void Psyz_PadsOverride(int port, char* frame, int len)
+/* Scripted input for automated runs. Each development feature lives in its own function so
+ * Psyz_PadsOverride stays readable; the shared pad-poll tick count is file scope. */
+static int pePadTickCount;
+
+/* PE2_FAST=1 lifts the frame limiter while an FMV plays, so development runs skip the intro. */
+static void pePadFastMovieVsync(int port)
 {
-    /* PE2_FAST=1 lifts the frame limiter while an FMV plays, so development runs skip the intro. */
     static int fastEnabled = -1, fastNow;
     if (fastEnabled < 0) fastEnabled = getenv("PE2_FAST") != NULL;
     if (fastEnabled && port == 0) {
@@ -347,112 +349,136 @@ void Psyz_PadsOverride(int port, char* frame, int len)
             Psyz_VideoSetVsyncMode(movie ? PSYZ_VSYNC_LIMITLESS : PSYZ_VSYNC_AUTO);
         }
     }
-    static int tick;
-    static int enabled = -1;
-    /* PE2_SKIPINTRO=1: the game's own "skip the title intro" switch, so development runs reach the title directly. */
+}
+
+/* PE2_SKIPINTRO=1: the game's own "skip the title intro" switch, so development runs reach the title directly. */
+static void pePadSkipIntro(int port, int tick)
+{
     if (port == 0 && tick < 300 && getenv("PE2_SKIPINTRO")) {
         gGameMainPersistentState.skipTitleIntro = 1;
     }
-    static int startTick, endTick;
+}
+
+static void pePadTraceTick(int port, int tick)
+{
+    if (port == 0 && getenv("PE2_TRACE") && (tick % 60) == 0) {
+        fprintf(stderr, "[trace] tick=%d movieStep=%d demo=%d\n", tick, gCdCmdQueue.movieStep, gDisplayState.demoScene);
+    }
+}
+
+/* development: PE2_DUMP_VRAM=<tick>:<file> writes the raw 1024x512 VRAM once (tools/port/export_vram.py) */
+static void pePadDumpVram(int tick)
+{
+    static int dumpTick = -2;
+    static char dumpPath[512];
+    if (dumpTick == -2) {
+        const char* spec = getenv("PE2_DUMP_VRAM");
+        dumpTick = spec && sscanf(spec, "%d:%511s", &dumpTick, dumpPath) == 2 ? dumpTick : -1;
+    }
+    if (dumpTick >= 0 && tick == dumpTick) {
+        static u_short vram[1024 * 512];
+        RECT all = { 0, 0, 1024, 512 };
+        StoreImage(&all, (u_long*)(void*)vram);
+        DrawSync(0);
+        FILE* f = fopen(dumpPath, "wb");
+        if (f) { fwrite(vram, sizeof vram, 1, f); fclose(f); }
+    }
+}
+
+/* Capture the actual presenter, including widescreen bars, without a desktop window. */
+static void pePadDumpFrame(int tick)
+{
+    static int frameTick = -2;
+    static char framePath[512];
+    if (frameTick == -2) {
+        const char* spec = getenv("PE2_DUMP_FRAME");
+        frameTick = spec && sscanf(spec, "%d:%511s", &frameTick, framePath) == 2 ? frameTick : -1;
+    }
+    if (frameTick < 0 || tick != frameTick) return;
+    int w=0,h=0;
+    unsigned char* rgb=Psyz_VideoAllocRenderedFrame(&w,&h);
+    FILE* file=rgb?fopen(framePath,"wb"):NULL;
+    if(file) { fprintf(file,"P6\n%d %d\n255\n",w,h);fwrite(rgb,3,(size_t)w*h,file);fclose(file); }
+    if(rgb) {
+        DISPENV display;GetDispEnv(&display);
+        PeBackgroundFrameInfo info={0};
+        int known=peBackgroundGetFrameInfo(display.disp.y,&info);
+        char metadata[520];snprintf(metadata,sizeof metadata,"%s.json",framePath);
+        FILE* sidecar=fopen(metadata,"w");
+        if(sidecar) {
+            fprintf(sidecar,"{\"tick\":%d,\"width\":%d,\"height\":%d,\"buffer_y\":%d,\"known_source\":%s,\"key\":\"%016" PRIx64 "\",\"location\":[%d,%d,%d,%d,%d,%d]}\n",
+                    tick,w,h,display.disp.y,known?"true":"false",info.key,
+                    info.location[0],info.location[1],info.location[2],info.location[3],info.location[4],info.location[5]);
+            fclose(sidecar);
+        }
+    }
+    free(rgb);
+}
+
+/* development: PE2_WARP=<tick>:stage,area,view,roomState,warp,variant[;<tick>:...] changes stage mid-game */
+static void pePadWarp(int tick)
+{
+    enum { MAX_WARPS = 8 };
+    static struct { int tick; unsigned key[6]; } warps[MAX_WARPS];
+    static int warpCount = -1;
+    if (warpCount < 0) {
+        warpCount = 0;
+        const char* spec = getenv("PE2_WARP");
+        while (spec && *spec && warpCount < MAX_WARPS) {
+            int used = 0;
+            unsigned* k = warps[warpCount].key;
+            if (sscanf(spec, "%d:%u,%u,%u,%u,%u,%u%n", &warps[warpCount].tick, &k[0], &k[1], &k[2], &k[3], &k[4], &k[5],
+                       &used) != 7) break;
+            warpCount++;
+            spec += used;
+            if (*spec == ';') spec++;
+        }
+    }
+    for (int i = 0; i < warpCount; i++) {
+        if (tick != warps[i].tick) continue;
+        extern void peDebugWarp(const GameLocationKey*);
+        const unsigned* k = warps[i].key;
+        GameLocationKey key = { (u8)k[2], (u8)k[3], (u8)k[1], (u8)k[0], (u8)k[4], (u8)k[5], { 0, 0 } };
+        peDebugWarp(&key);
+    }
+}
+
+/* PE2_PAD_HOLD: hold a button mask over a tick interval (PS1 button bits, active low in the pad frame). */
+static void pePadHoldButtons(char* frame, int tick)
+{
     static unsigned holdMask;
-    static int holdStart, holdEnd;
+    static int holdStart, holdEnd, initialized;
+    if (!initialized) {
+        holdMask = getenv("PE2_PAD_HOLD") ? strtoul(getenv("PE2_PAD_HOLD"), NULL, 16) & 0xffff : 0;
+        holdStart = getenv("PE2_PAD_FROM") ? atoi(getenv("PE2_PAD_FROM")) : 0;
+        holdEnd = getenv("PE2_PAD_UNTIL") ? atoi(getenv("PE2_PAD_UNTIL")) : 0;
+        initialized = 1;
+    }
+    if (tick >= holdStart && holdEnd > tick) {
+        frame[2] &= ~(holdMask & 0xff);
+        frame[3] &= ~((holdMask >> 8) & 0xff);
+    }
+}
+
+/* PE2_AUTOPRESS=<first tick> taps Start, then Cross, in turn, until PE2_AUTOPRESS_UNTIL. */
+static void pePadAutopress(char* frame, int tick)
+{
+    static int enabled = -1, startTick, endTick;
     if (enabled < 0) {
         enabled = getenv("PE2_AUTOPRESS") != NULL;
         startTick = enabled ? atoi(getenv("PE2_AUTOPRESS")) : 0;
         endTick = getenv("PE2_AUTOPRESS_UNTIL") ? atoi(getenv("PE2_AUTOPRESS_UNTIL")) : 0;
-        /* Optional development input, in the same legacy pad-poll ticks as autoplay.
-         * Mask uses PS1 button bits (Up=0010, Right=0020, Down=0040, Left=0080).
-         * A finite interval releases all injected buttons at its end. */
-        holdMask = getenv("PE2_PAD_HOLD") ? strtoul(getenv("PE2_PAD_HOLD"), NULL, 16) & 0xffff : 0;
-        holdStart = getenv("PE2_PAD_FROM") ? atoi(getenv("PE2_PAD_FROM")) : 0;
-        holdEnd = getenv("PE2_PAD_UNTIL") ? atoi(getenv("PE2_PAD_UNTIL")) : 0;
     }
-    if (port == 0 && getenv("PE2_TRACE") && (tick % 60) == 0) {
-        fprintf(stderr, "[trace] tick=%d movieStep=%d demo=%d\n", tick, gCdCmdQueue.movieStep, gDisplayState.demoScene);
-    }
-    int currentTick = tick++;
-    if (port == 0) {   /* development: PE2_DUMP_VRAM=<tick>:<file> writes the raw 1024x512 VRAM once (tools/port/export_vram.py) */
-        static int dumpTick = -2;
-        static char dumpPath[512];
-        if (dumpTick == -2) {
-            const char* spec = getenv("PE2_DUMP_VRAM");
-            dumpTick = spec && sscanf(spec, "%d:%511s", &dumpTick, dumpPath) == 2 ? dumpTick : -1;
-        }
-        if (dumpTick >= 0 && currentTick == dumpTick) {
-            static u_short vram[1024 * 512];
-            RECT all = { 0, 0, 1024, 512 };
-            StoreImage(&all, (u_long*)(void*)vram);
-            DrawSync(0);
-            FILE* f = fopen(dumpPath, "wb");
-            if (f) { fwrite(vram, sizeof vram, 1, f); fclose(f); }
-        }
-    }
-    if (port == 0) {   /* Capture the actual presenter, including widescreen bars, without a desktop window. */
-        static int frameTick = -2;
-        static char framePath[512];
-        if (frameTick == -2) {
-            const char* spec = getenv("PE2_DUMP_FRAME");
-            frameTick = spec && sscanf(spec, "%d:%511s", &frameTick, framePath) == 2 ? frameTick : -1;
-        }
-        if (frameTick >= 0 && currentTick == frameTick) {
-            int w=0,h=0;
-            unsigned char* rgb=Psyz_VideoAllocRenderedFrame(&w,&h);
-            FILE* file=rgb?fopen(framePath,"wb"):NULL;
-            if(file) { fprintf(file,"P6\n%d %d\n255\n",w,h);fwrite(rgb,3,(size_t)w*h,file);fclose(file); }
-            if(rgb) {
-                DISPENV display;GetDispEnv(&display);
-                PeBackgroundFrameInfo info={0};
-                int known=peBackgroundGetFrameInfo(display.disp.y,&info);
-                char metadata[520];snprintf(metadata,sizeof metadata,"%s.json",framePath);
-                FILE* sidecar=fopen(metadata,"w");
-                if(sidecar) {
-                    fprintf(sidecar,"{\"tick\":%d,\"width\":%d,\"height\":%d,\"buffer_y\":%d,\"known_source\":%s,\"key\":\"%016" PRIx64 "\",\"location\":[%d,%d,%d,%d,%d,%d]}\n",
-                            currentTick,w,h,display.disp.y,known?"true":"false",info.key,
-                            info.location[0],info.location[1],info.location[2],info.location[3],info.location[4],info.location[5]);
-                    fclose(sidecar);
-                }
-            }
-            free(rgb);
-        }
-    }
-    if (port == 0) {   /* development: PE2_WARP=<tick>:stage,area,view,roomState,warp,variant[;<tick>:...] changes stage mid-game */
-        enum { MAX_WARPS = 8 };
-        static struct { int tick; unsigned key[6]; } warps[MAX_WARPS];
-        static int warpCount = -1;
-        if (warpCount < 0) {
-            warpCount = 0;
-            const char* spec = getenv("PE2_WARP");
-            while (spec && *spec && warpCount < MAX_WARPS) {
-                int used = 0;
-                unsigned* k = warps[warpCount].key;
-                if (sscanf(spec, "%d:%u,%u,%u,%u,%u,%u%n", &warps[warpCount].tick, &k[0], &k[1], &k[2], &k[3], &k[4], &k[5],
-                           &used) != 7) break;
-                warpCount++;
-                spec += used;
-                if (*spec == ';') spec++;
-            }
-        }
-        for (int i = 0; i < warpCount; i++) {
-            if (currentTick != warps[i].tick) continue;
-            extern void peDebugWarp(const GameLocationKey*);
-            const unsigned* k = warps[i].key;
-            GameLocationKey key = { (u8)k[2], (u8)k[3], (u8)k[1], (u8)k[0], (u8)k[4], (u8)k[5], { 0, 0 } };
-            peDebugWarp(&key);
-        }
-    }
-    if (port != 0 || len < 4) return;
-    peMemoryCardAdvanceIo();
-    if (currentTick >= holdStart && holdEnd > currentTick) {
-        frame[2] &= ~(holdMask & 0xff);
-        frame[3] &= ~((holdMask >> 8) & 0xff);
-    }
-    if (enabled && currentTick >= startTick && (!endTick || currentTick < endTick)) {
-        int phase = ((tick - startTick) / 20) % 6;
-        if (phase == 0) frame[2] &= ~(1 << 3);
-        if (phase == 3) frame[3] &= ~(1 << 6);
-    }
-    /* Replays replace the complete sample after development overrides, so
-     * keyboard/controller input and autoplay cannot alter a recorded route. */
+    if (!enabled || tick < startTick || (endTick && tick >= endTick)) return;
+    /* pePadTickCount has already advanced past this sample, matching the original evaluation order. */
+    int phase = ((pePadTickCount - startTick) / 20) % 6;
+    if (phase == 0) frame[2] &= ~(1 << 3);
+    if (phase == 3) frame[3] &= ~(1 << 6);
+}
+
+/* PE2_PAD_RECORD/REPLAY traces; PE2_PAD_CONTROL continues headlessly after a replay ends. */
+static void pePadRecordReplay(char* frame, int len)
+{
     static FILE *record, *replay;
     static int traceInitialized, controlEnabled, replayFinished;
     static uint64_t padFrame;
@@ -491,6 +517,26 @@ void Psyz_PadsOverride(int port, char* frame, int len)
         fprintf(stderr, "[pad] recording failed at frame %llu\n", (unsigned long long)padFrame); exit(1);
     }
     padFrame++;
+}
+
+void Psyz_PadsOverride(int port, char* frame, int len)
+{
+    pePadFastMovieVsync(port);
+    int currentTick = pePadTickCount++;
+    pePadSkipIntro(port, currentTick);
+    pePadTraceTick(port, currentTick);
+    if (port == 0) {
+        pePadDumpVram(currentTick);
+        pePadDumpFrame(currentTick);
+        pePadWarp(currentTick);
+    }
+    if (port != 0 || len < 4) return;
+    peMemoryCardAdvanceIo();
+    pePadHoldButtons(frame, currentTick);
+    pePadAutopress(frame, currentTick);
+    /* Replays replace the complete sample after development overrides, so
+     * keyboard/controller input and autoplay cannot alter a recorded route. */
+    pePadRecordReplay(frame, len);
 }
 
 MATRIX* gHostPlayerCoordMtx;

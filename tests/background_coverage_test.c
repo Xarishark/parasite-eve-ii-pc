@@ -4,6 +4,7 @@
 
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"line %d: %s\n",__LINE__,#x);exit(1); } } while(0)
 static int effective, leftEdge, rightEdge, bufferY, unsupported;
+void Psyz_VideoSetWidescreenDisplayOnly(int enabled) { CHECK(enabled==1); }
 int Psyz_VideoSetWidescreen(int enabled) { effective=unsupported?0:enabled;return unsupported?-1:0; }
 void Psyz_VideoSetWidescreenPicture(int y,int left,int right) { bufferY=y;leftEdge=left;rightEdge=right; }
 int main(void)

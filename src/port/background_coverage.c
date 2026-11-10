@@ -18,6 +18,7 @@ int peBackgroundConsumeNativeFrame(int buffer_y)
 void peBackgroundSetWidescreen(int enabled)
 {
     requestedWidescreen = enabled != 0;
+    Psyz_VideoSetWidescreenDisplayOnly(1);
     /* Drop previous-room coverage immediately; the presenter re-establishes
      * it before drawing. LoadImage backdrops are not squeezed by PsyZ, so
      * merely enabling its widescreen flag would misalign unmodified rooms. */

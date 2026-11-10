@@ -18,7 +18,15 @@ import collections, pathlib, re, sys
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 log = pathlib.Path(sys.argv[1]).read_text().splitlines()
 out = ROOT / 'cmake/overlay_renames.cmake'
-public, flip = set(), set()
+# These resident tables are read outside the package that defines them. Keep
+# the base package public, including when a stale generated global stub exists.
+resident_exports = {
+    'gM4a1PlayerAnimationBank': 'pe_var_m4a1__m4a1',
+    'gM4a1RifleModel': 'pe_var_m4a1__m4a1',
+    'gMp5a5PlayerAnimationBank': 'pe_var_mp5a5__mp5a5',
+    'gMp5a5WeaponModel': 'pe_var_mp5a5__mp5a5',
+}
+public, flip = set(resident_exports), set()
 for i, a in enumerate(sys.argv[2:4]):
     names = set(re.findall(r'^  "_([^"]+)", referenced from', pathlib.Path(a).read_text(), re.M))
     (public if i == 0 else flip).update(names)
@@ -44,6 +52,8 @@ for s, objs in defs.items():
         continue
     name = s[1:] if s.startswith('_') else s
     keep = sorted(objs, key=lambda o: ((o[0] != 'game_overlays') != (name in flip), o))[0] if name in public else None
+    if name in resident_exports:
+        keep = next((o for o in objs if o[0] == resident_exports[name]), keep)
     for obj in objs:
         if obj == keep:
             continue

@@ -136,6 +136,14 @@ def collect(target):
     snapshot["flow"] = {
         "pendingMode": number(child(display, "pendingMode")),
         "gameMode": number(child(display, "gameMode")),
+        "menuHoldState": number(child(display, "holdState")),
+        "displayOwner": number(child(display, "displayOwner")),
+        "frameBuffer": number(child(display, "frameBuffer")),
+        "drawBuffer": number(child(display, "drawBuffer")),
+        "menuHoldCount": number(child(display, "holdCount")),
+        "hudInputDelay": number(target.FindFirstGlobalVariable("gHudInputDelayUpdates")),
+        "cutsceneHold": number(child(session, "cutsceneHold")),
+        "dirActionBusy": number(child(session, "dirActionBusy")),
         "battleResetPending": number(child(session, "battleResetPending")),
         "flowFlags": number(child(session, "flowFlags")),
         "transitionTasks": [],
@@ -881,12 +889,16 @@ def main():
     parser.add_argument("--vram", type=Path, help="save the complete software VRAM at EOF (RGB555, 1024x512)")
     parser.add_argument("--memory-card-dir", type=Path,
                         help="persistent cards for save/load fixtures (default: isolated temporary empty cards)")
+    parser.add_argument("--backend", choices=("software", "gpu"), default="software",
+                        help="software or a hidden GPU window for the read-only checkpoint")
     parser.add_argument("--clock", choices=("host", "video"),
                         help="select PsyZ wall/device time or offline video/audio time (default inherits environment)")
     parser.add_argument("--raster-clock", choices=("host", "virtual"),
                         help="scanline clock: virtual removes host frame-budget jitter (requires a matching PsyZ build)")
     parser.add_argument("--expect", action="append", default=[], metavar="KEY=JSON")
     args = parser.parse_args()
+    if args.vram and args.backend != "software":
+        parser.error("--vram reads software VRAM; use --backend software")
     if not shutil.which("lldb"):
         parser.error("lldb is required")
     for path in (args.replay, args.binary, args.disc):
@@ -914,7 +926,7 @@ def main():
         invocation += ["-o", command]
     invocation += ["-k", "bt", "-k", "command script import " + json.dumps(str(Path(__file__).resolve())),
                    "-k", "pe2-transition"]
-    env = dict(os.environ, PSYZ_HEADLESS="1", PE2_SKIPINTRO="1", PE2_PAD_REPLAY=str(args.replay.resolve()))
+    env = dict(os.environ, PSYZ_HEADLESS="gpu" if args.backend == "gpu" else "1", PE2_SKIPINTRO="1", PE2_PAD_REPLAY=str(args.replay.resolve()))
     if args.clock:
         env["PSYZ_AUDIO_CLOCK"] = args.clock
     if args.raster_clock:

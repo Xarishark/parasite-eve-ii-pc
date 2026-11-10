@@ -30,10 +30,13 @@ pub fn signed_byte_sum(bytes: &[u8]) -> u16 {
 /// `dst` points at the pair inside the record; `payload` is the record body
 /// after the 4-byte checksum header. Mirrors `_mcWriteSaveSectionChecksums`.
 pub fn write_section_checksum(record: &mut [u8]) {
-    assert!(record.len() >= 4, "checksummed record needs a 4-byte header");
+    assert!(
+        record.len() >= 4,
+        "checksummed record needs a 4-byte header"
+    );
     let sum = signed_byte_sum(&record[4..]);
     record[0..2].copy_from_slice(&sum.to_le_bytes());
-    record[2..4].copy_from_slice(&((CHECKSUM_MASK - sum)).to_le_bytes());
+    record[2..4].copy_from_slice(&(CHECKSUM_MASK - sum).to_le_bytes());
 }
 
 /// Return whether the record's stored checksum pair matches its payload.
@@ -59,7 +62,7 @@ pub fn write_save_header_checksum(save: &mut [u8]) {
     let end = SAVE_LOCATION_OFFSET + HEADER_CHECKSUM_BYTES;
     let sum = signed_byte_sum(&save[SAVE_LOCATION_OFFSET..end]);
     save[CHECKSUM..CHECKSUM + 2].copy_from_slice(&sum.to_le_bytes());
-    save[COMPLEMENT..COMPLEMENT + 2].copy_from_slice(&((CHECKSUM_MASK - sum)).to_le_bytes());
+    save[COMPLEMENT..COMPLEMENT + 2].copy_from_slice(&(CHECKSUM_MASK - sum).to_le_bytes());
 }
 
 /// Verify the save header checksum pair without rewriting it.
@@ -71,9 +74,14 @@ pub fn verify_save_header_checksum(save: &[u8]) -> bool {
     let start = SAVE_LOCATION_OFFSET;
     let end = SAVE_LOCATION_OFFSET + HEADER_CHECKSUM_BYTES;
     let sum = signed_byte_sum(&save[start..end]);
-    let stored = u16::from_le_bytes([save[SAVE_HEADER_CHECKSUM_OFFSET], save[SAVE_HEADER_CHECKSUM_OFFSET + 1]]);
-    let stored_comp =
-        u16::from_le_bytes([save[SAVE_HEADER_CHECKSUM_OFFSET + 2], save[SAVE_HEADER_CHECKSUM_OFFSET + 3]]);
+    let stored = u16::from_le_bytes([
+        save[SAVE_HEADER_CHECKSUM_OFFSET],
+        save[SAVE_HEADER_CHECKSUM_OFFSET + 1],
+    ]);
+    let stored_comp = u16::from_le_bytes([
+        save[SAVE_HEADER_CHECKSUM_OFFSET + 2],
+        save[SAVE_HEADER_CHECKSUM_OFFSET + 3],
+    ]);
     stored == sum && stored_comp == CHECKSUM_MASK - sum
 }
 
@@ -84,7 +92,7 @@ pub fn write_card_header_checksum(file: &[u8], save: &mut [u8]) {
     let sum = signed_byte_sum(&file[..0x200]);
     save[TITLE_CHECKSUM_OFFSET..TITLE_CHECKSUM_OFFSET + 2].copy_from_slice(&sum.to_le_bytes());
     save[TITLE_CHECKSUM_OFFSET + 2..TITLE_CHECKSUM_OFFSET + 4]
-        .copy_from_slice(&((CHECKSUM_MASK - sum)).to_le_bytes());
+        .copy_from_slice(&(CHECKSUM_MASK - sum).to_le_bytes());
 }
 
 /// Recompute every live section checksum (sections 1..8).
@@ -106,7 +114,8 @@ pub fn write_section_checksum_summary(file: &mut [u8]) {
     }
     let save = &mut file[crate::layout::SAVE_SECTION.live_offset..];
     save[BUFFER_CHECKSUM_OFFSET..BUFFER_CHECKSUM_OFFSET + 2].copy_from_slice(&sum.to_le_bytes());
-    save[BUFFER_CHECKSUM_OFFSET + 2..BUFFER_CHECKSUM_OFFSET + 4].copy_from_slice(&(!sum).to_le_bytes());
+    save[BUFFER_CHECKSUM_OFFSET + 2..BUFFER_CHECKSUM_OFFSET + 4]
+        .copy_from_slice(&(!sum).to_le_bytes());
 }
 
 #[cfg(test)]

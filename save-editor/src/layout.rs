@@ -43,23 +43,59 @@ impl SectionLayout {
 
 /// Card file header section (`_McCardFileHeader`): 'S','C' magic, Shift-JIS
 /// title, CLUT and three icon frames. Written without a checksum.
-pub const HEADER_SECTION: SectionLayout = SectionLayout { live_offset: 0x0000, record_bytes: 0x200, card_sectors: 4 };
+pub const HEADER_SECTION: SectionLayout = SectionLayout {
+    live_offset: 0x0000,
+    record_bytes: 0x200,
+    card_sectors: 4,
+};
 /// Save image section (`McSaveData`, live and backup copies).
-pub const SAVE_SECTION: SectionLayout = SectionLayout { live_offset: 0x0200, record_bytes: 0x944, card_sectors: 0x26 };
+pub const SAVE_SECTION: SectionLayout = SectionLayout {
+    live_offset: 0x0200,
+    record_bytes: 0x944,
+    card_sectors: 0x26,
+};
 /// Player-status section (`PlayerStatus::save` and `saveBackup`, 0x40 each).
-pub const PLAYER_SECTION: SectionLayout = SectionLayout { live_offset: 0x1500, record_bytes: 0x40, card_sectors: 1 };
+pub const PLAYER_SECTION: SectionLayout = SectionLayout {
+    live_offset: 0x1500,
+    record_bytes: 0x40,
+    card_sectors: 1,
+};
 /// Akropolis game-flag bank section.
-pub const AKROPOLIS_SECTION: SectionLayout = SectionLayout { live_offset: 0x1580, record_bytes: 0x6C, card_sectors: 2 };
+pub const AKROPOLIS_SECTION: SectionLayout = SectionLayout {
+    live_offset: 0x1580,
+    record_bytes: 0x6C,
+    card_sectors: 2,
+};
 /// Dryfield game-flag bank section.
-pub const DRYFIELD_SECTION: SectionLayout = SectionLayout { live_offset: 0x1680, record_bytes: 0xB0, card_sectors: 3 };
+pub const DRYFIELD_SECTION: SectionLayout = SectionLayout {
+    live_offset: 0x1680,
+    record_bytes: 0xB0,
+    card_sectors: 3,
+};
 /// Dryfield-at-night game-flag bank section.
-pub const DRYFIELD_NIGHT_SECTION: SectionLayout = SectionLayout { live_offset: 0x1800, record_bytes: 0x24, card_sectors: 1 };
+pub const DRYFIELD_NIGHT_SECTION: SectionLayout = SectionLayout {
+    live_offset: 0x1800,
+    record_bytes: 0x24,
+    card_sectors: 1,
+};
 /// Mine/Shelter game-flag bank section.
-pub const MINE_SHELTER_SECTION: SectionLayout = SectionLayout { live_offset: 0x1880, record_bytes: 0xE4, card_sectors: 4 };
+pub const MINE_SHELTER_SECTION: SectionLayout = SectionLayout {
+    live_offset: 0x1880,
+    record_bytes: 0xE4,
+    card_sectors: 4,
+};
 /// Neo Ark game-flag bank section.
-pub const NEO_ARK_SECTION: SectionLayout = SectionLayout { live_offset: 0x1A80, record_bytes: 0xA4, card_sectors: 3 };
+pub const NEO_ARK_SECTION: SectionLayout = SectionLayout {
+    live_offset: 0x1A80,
+    record_bytes: 0xA4,
+    card_sectors: 3,
+};
 /// Nibble flag bank section (`GameFlagNibbleBank`).
-pub const NIBBLE_SECTION: SectionLayout = SectionLayout { live_offset: 0x1C00, record_bytes: 0x100, card_sectors: 4 };
+pub const NIBBLE_SECTION: SectionLayout = SectionLayout {
+    live_offset: 0x1C00,
+    record_bytes: 0x100,
+    card_sectors: 4,
+};
 
 /// Checksummed sections 1..8 in on-card order (`_McSaveSections` minus the header).
 pub const CHECKSUM_SECTIONS: [SectionLayout; 8] = [
@@ -85,7 +121,10 @@ mod tests {
     fn sections_chain_without_overlap() {
         let mut cursor = HEADER_SECTION.live_offset + HEADER_SECTION.extent();
         for section in CHECKSUM_SECTIONS {
-            assert_eq!(section.live_offset, cursor, "section must follow the previous extent");
+            assert_eq!(
+                section.live_offset, cursor,
+                "section must follow the previous extent"
+            );
             cursor += section.extent();
         }
         assert!(cursor <= FILE_SIZE, "sections must fit one 8 KB card block");

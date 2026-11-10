@@ -146,14 +146,20 @@ impl SaveImage {
     /// Wrap an existing image, validating its size.
     pub fn from_bytes(raw: Vec<u8>) -> Result<Self> {
         if raw.len() != SAVE_IMAGE_SIZE {
-            bail!("save image must be {} bytes, got {}", SAVE_IMAGE_SIZE, raw.len());
+            bail!(
+                "save image must be {} bytes, got {}",
+                SAVE_IMAGE_SIZE,
+                raw.len()
+            );
         }
         Ok(Self { raw })
     }
 
     /// A zeroed image with valid structure (no checksums yet).
     pub fn blank() -> Self {
-        Self { raw: vec![0; SAVE_IMAGE_SIZE] }
+        Self {
+            raw: vec![0; SAVE_IMAGE_SIZE],
+        }
     }
 
     // -- little-endian field helpers -------------------------------------------------
@@ -198,7 +204,7 @@ impl SaveImage {
         self.raw[OFF_CLEAR_COUNT] = (v.clamp(0, 99)) as u8;
     }
     pub fn game_mode(&self) -> u8 {
-        self.raw[OFF_GAME_MODE] as u8
+        self.raw[OFF_GAME_MODE]
     }
     pub fn set_game_mode(&mut self, v: u8) {
         self.raw[OFF_GAME_MODE] = v.min(3);
@@ -348,7 +354,7 @@ impl SaveImage {
         self.raw[OFF_MOVE_MODE] = run as u8;
     }
     pub fn button_layout(&self) -> u8 {
-        self.raw[OFF_BUTTON_LAYOUT] as u8
+        self.raw[OFF_BUTTON_LAYOUT]
     }
     pub fn set_button_layout(&mut self, v: u8) {
         self.raw[OFF_BUTTON_LAYOUT] = v.min(2);
@@ -360,7 +366,7 @@ impl SaveImage {
         self.raw[OFF_SOUND_MODE] = mono as u8;
     }
     pub fn music_volume(&self) -> u8 {
-        self.raw[OFF_MUSIC_VOLUME] as u8
+        self.raw[OFF_MUSIC_VOLUME]
     }
     pub fn set_music_volume(&mut self, v: u8) {
         self.raw[OFF_MUSIC_VOLUME] = v.min(3);
@@ -499,7 +505,14 @@ impl SaveImage {
         assert!(bit < COLLECTED_BIT_WORDS * 32);
         let off = OFF_COLLECTED_BITS + (bit / 32) * 4;
         let word = self.u32_at(off);
-        self.set_u32_at(off, if on { word | (1 << (bit % 32)) } else { word & !(1 << (bit % 32)) });
+        self.set_u32_at(
+            off,
+            if on {
+                word | (1 << (bit % 32))
+            } else {
+                word & !(1 << (bit % 32))
+            },
+        );
     }
     pub fn item_seen_bit(&self, item_id: usize) -> bool {
         assert!(item_id < ITEM_SEEN_BIT_WORDS * 32);
@@ -509,7 +522,14 @@ impl SaveImage {
         assert!(item_id < ITEM_SEEN_BIT_WORDS * 32);
         let off = OFF_ITEM_SEEN_BITS + (item_id / 32) * 4;
         let word = self.u32_at(off);
-        self.set_u32_at(off, if on { word | (1 << (item_id % 32)) } else { word & !(1 << (item_id % 32)) });
+        self.set_u32_at(
+            off,
+            if on {
+                word | (1 << (item_id % 32))
+            } else {
+                word & !(1 << (item_id % 32))
+            },
+        );
     }
 
     /// Mark every item id up to `max_id` (exclusive) as seen.
@@ -607,66 +627,169 @@ impl SaveImage {
             interlaced: Some(self.interlaced()),
             cheat_mode: Some(self.cheat_mode()),
             actors_frozen: Some(self.actors_frozen()),
-            item_rows: Some((0..ITEM_ROW_COUNT).map(|i| {
-                let row = self.item_row(i);
-                if row.item_id == 0 { None } else { Some(row) }
-            }).collect()),
+            item_rows: Some(
+                (0..ITEM_ROW_COUNT)
+                    .map(|i| {
+                        let row = self.item_row(i);
+                        if row.item_id == 0 {
+                            None
+                        } else {
+                            Some(row)
+                        }
+                    })
+                    .collect(),
+            ),
             carried_range: Some(self.carried_range()),
-            weapon_loads: Some((0..WEAPON_LOAD_COUNT).map(|i| Some(self.weapon_load(i))).collect()),
-            weapon_use_counts: Some((0..WEAPON_USE_COUNT).map(|i| self.weapon_use_count(i)).collect()),
+            weapon_loads: Some(
+                (0..WEAPON_LOAD_COUNT)
+                    .map(|i| Some(self.weapon_load(i)))
+                    .collect(),
+            ),
+            weapon_use_counts: Some(
+                (0..WEAPON_USE_COUNT)
+                    .map(|i| self.weapon_use_count(i))
+                    .collect(),
+            ),
             pe_levels: Some((0..PE_LEVEL_COUNT).map(|i| self.pe_level(i)).collect()),
             pe_use_counts: Some((0..PE_USE_COUNT).map(|i| self.pe_use_count(i)).collect()),
-            item_level_bonus: Some((0..ITEM_LEVEL_BONUS_COUNT).map(|i| self.item_level_bonus(i)).collect()),
-            collected_bits: Some((0..COLLECTED_BIT_WORDS * 32).filter(|b| self.collected_bit(*b)).collect()),
-            item_seen_bits: Some((0..ITEM_SEEN_BIT_WORDS * 32).filter(|b| self.item_seen_bit(*b)).collect()),
+            item_level_bonus: Some(
+                (0..ITEM_LEVEL_BONUS_COUNT)
+                    .map(|i| self.item_level_bonus(i))
+                    .collect(),
+            ),
+            collected_bits: Some(
+                (0..COLLECTED_BIT_WORDS * 32)
+                    .filter(|b| self.collected_bit(*b))
+                    .collect(),
+            ),
+            item_seen_bits: Some(
+                (0..ITEM_SEEN_BIT_WORDS * 32)
+                    .filter(|b| self.item_seen_bit(*b))
+                    .collect(),
+            ),
         }
     }
 
     /// Apply a transfer snapshot onto this image. `None` fields are skipped,
     /// so partial snapshots edit only the fields they carry.
     pub fn apply_transfer(&mut self, t: &SaveTransfer) {
-        if let Some(v) = t.location { self.set_location(v); }
-        if let Some(v) = t.play_time_minutes { self.set_play_time_minutes(v); }
-        if let Some(v) = t.clear_count { self.set_clear_count(v); }
-        if let Some(v) = t.game_mode { self.set_game_mode(v); }
-        if let Some(v) = t.visit_flags { self.set_visit_flags(v); }
-        if let Some(v) = t.save_number { self.set_save_number(v); }
-        if let Some(v) = t.save_point { self.set_save_point(v); }
-        if let Some(v) = t.companion_type { self.set_companion_type(v); }
-        if let Some(v) = t.companion_variant { self.set_companion_variant(v); }
-        if let Some(v) = t.companion_hp { self.set_companion_hp(v); }
-        if let Some(v) = t.companion_hp_max { self.set_companion_hp_max(v); }
-        if let Some(v) = t.player_exp { self.set_player_exp(v); }
-        if let Some(v) = t.player_bp { self.set_player_bp(v); }
-        if let Some(v) = t.max_exp { self.set_max_exp(v); }
-        if let Some(v) = t.max_bp { self.set_max_bp(v); }
-        if let Some(v) = t.hp_bonus { self.set_hp_bonus(v); }
-        if let Some(v) = t.mp_bonus { self.set_mp_bonus(v); }
-        if let Some(v) = t.character_id { self.set_character_id(v); }
-        if let Some(v) = t.battles_won { self.set_battles_won(v); }
-        if let Some(v) = t.battles_escaped { self.set_battles_escaped(v); }
-        if let Some(v) = t.save_count { self.set_save_count(v); }
-        if let Some(v) = t.replay_rank { self.set_replay_rank(v); }
-        if let Some(v) = t.shop_tiers { self.set_shop_tiers(v); }
-        if let Some(v) = t.shop_stock { self.set_shop_stock(v); }
-        if let Some(v) = t.vibration_off { self.set_vibration_off(v); }
-        if let Some(v) = t.run_default { self.set_run_default(v); }
-        if let Some(v) = t.button_layout { self.set_button_layout(v); }
-        if let Some(v) = t.mono_sound { self.set_mono_sound(v); }
-        if let Some(v) = t.music_volume { self.set_music_volume(v); }
-        if let Some(v) = t.cursor_reset { self.set_cursor_reset(v); }
-        if let Some(v) = t.interlaced { self.set_interlaced(v); }
-        if let Some(v) = t.cheat_mode { self.set_cheat_mode(v); }
-        if let Some(v) = t.actors_frozen { self.set_actors_frozen(v); }
+        if let Some(v) = t.location {
+            self.set_location(v);
+        }
+        if let Some(v) = t.play_time_minutes {
+            self.set_play_time_minutes(v);
+        }
+        if let Some(v) = t.clear_count {
+            self.set_clear_count(v);
+        }
+        if let Some(v) = t.game_mode {
+            self.set_game_mode(v);
+        }
+        if let Some(v) = t.visit_flags {
+            self.set_visit_flags(v);
+        }
+        if let Some(v) = t.save_number {
+            self.set_save_number(v);
+        }
+        if let Some(v) = t.save_point {
+            self.set_save_point(v);
+        }
+        if let Some(v) = t.companion_type {
+            self.set_companion_type(v);
+        }
+        if let Some(v) = t.companion_variant {
+            self.set_companion_variant(v);
+        }
+        if let Some(v) = t.companion_hp {
+            self.set_companion_hp(v);
+        }
+        if let Some(v) = t.companion_hp_max {
+            self.set_companion_hp_max(v);
+        }
+        if let Some(v) = t.player_exp {
+            self.set_player_exp(v);
+        }
+        if let Some(v) = t.player_bp {
+            self.set_player_bp(v);
+        }
+        if let Some(v) = t.max_exp {
+            self.set_max_exp(v);
+        }
+        if let Some(v) = t.max_bp {
+            self.set_max_bp(v);
+        }
+        if let Some(v) = t.hp_bonus {
+            self.set_hp_bonus(v);
+        }
+        if let Some(v) = t.mp_bonus {
+            self.set_mp_bonus(v);
+        }
+        if let Some(v) = t.character_id {
+            self.set_character_id(v);
+        }
+        if let Some(v) = t.battles_won {
+            self.set_battles_won(v);
+        }
+        if let Some(v) = t.battles_escaped {
+            self.set_battles_escaped(v);
+        }
+        if let Some(v) = t.save_count {
+            self.set_save_count(v);
+        }
+        if let Some(v) = t.replay_rank {
+            self.set_replay_rank(v);
+        }
+        if let Some(v) = t.shop_tiers {
+            self.set_shop_tiers(v);
+        }
+        if let Some(v) = t.shop_stock {
+            self.set_shop_stock(v);
+        }
+        if let Some(v) = t.vibration_off {
+            self.set_vibration_off(v);
+        }
+        if let Some(v) = t.run_default {
+            self.set_run_default(v);
+        }
+        if let Some(v) = t.button_layout {
+            self.set_button_layout(v);
+        }
+        if let Some(v) = t.mono_sound {
+            self.set_mono_sound(v);
+        }
+        if let Some(v) = t.music_volume {
+            self.set_music_volume(v);
+        }
+        if let Some(v) = t.cursor_reset {
+            self.set_cursor_reset(v);
+        }
+        if let Some(v) = t.interlaced {
+            self.set_interlaced(v);
+        }
+        if let Some(v) = t.cheat_mode {
+            self.set_cheat_mode(v);
+        }
+        if let Some(v) = t.actors_frozen {
+            self.set_actors_frozen(v);
+        }
         if let Some(rows) = &t.item_rows {
             for (i, row) in rows.iter().enumerate().take(ITEM_ROW_COUNT) {
                 match row {
                     Some(row) => self.set_item_row(i, *row),
-                    None => self.set_item_row(i, ItemRow { item_id: 0, attach_slot: 0, qty: 0 }),
+                    None => self.set_item_row(
+                        i,
+                        ItemRow {
+                            item_id: 0,
+                            attach_slot: 0,
+                            qty: 0,
+                        },
+                    ),
                 }
             }
         }
-        if let Some(r) = t.carried_range { self.set_carried_range(r); }
+        if let Some(r) = t.carried_range {
+            self.set_carried_range(r);
+        }
         if let Some(loads) = &t.weapon_loads {
             for (i, load) in loads.iter().enumerate().take(WEAPON_LOAD_COUNT) {
                 if let Some(load) = load {
@@ -718,8 +841,22 @@ mod tests {
     #[test]
     fn item_rows_roundtrip() {
         let mut save = SaveImage::blank();
-        save.set_item_row(3, ItemRow { item_id: 0x85, attach_slot: -1, qty: 7 });
-        assert_eq!(save.item_row(3), ItemRow { item_id: 0x85, attach_slot: -1, qty: 7 });
+        save.set_item_row(
+            3,
+            ItemRow {
+                item_id: 0x85,
+                attach_slot: -1,
+                qty: 7,
+            },
+        );
+        assert_eq!(
+            save.item_row(3),
+            ItemRow {
+                item_id: 0x85,
+                attach_slot: -1,
+                qty: 7
+            }
+        );
         save.set_item_row(300.min(ITEM_ROW_COUNT - 1), ItemRow::default());
     }
 

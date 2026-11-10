@@ -252,7 +252,16 @@ void displayPresentTaskFrame(s32 bufferIndex)
 #endif
         }
 #ifdef __psyz
-        peBackgroundEndFrame(gDisplayState.drawEnv[bufferIndex].clip.y,0,gDisplayState.gameTick,gDisplayState.vsyncCount,NULL);
+        /* Pad-poll checkpoints can precede the menu draw. Capture a completed
+         * task buffer instead, only for an explicit UI diagnostic. */
+        if(getenv("PE2_CAPTURE_UI_FRAME") && gGameSession && gGameSession->uiOpen) {
+            static unsigned uiFrame;
+            PeBackgroundSimulationState simulation={.ui_frame=++uiFrame,
+                .anim_frame=gDisplayState.animFrame,.frame_count=gDisplayState.frameCount,
+                .loop_count=gDisplayState.loopCount,.loop_ticks=gDisplayState.loopTicks,
+                .random_lcg=gRandomLcgState,.random_bios=Psyz_RandState()};
+            peBackgroundEndFrame(gDisplayState.drawEnv[bufferIndex].clip.y,0,gDisplayState.gameTick,gDisplayState.vsyncCount,&simulation);
+        } else peBackgroundEndFrame(gDisplayState.drawEnv[bufferIndex].clip.y,0,gDisplayState.gameTick,gDisplayState.vsyncCount,NULL);
 #endif
     }
 }

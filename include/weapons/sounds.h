@@ -7,7 +7,7 @@
 
 /// A weapon sound id's ammunition variant: the bank of the loaded round, bits 24..27 of the id (bits 8..11 of the
 /// bank). `variant` is the round's index from its family's first (`SHOTGUN_ROUND_FIRST`, `GRENADE_ROUND_FIRST`).
-#define WEAPON_SOUND_VARIANT(variant) ((variant) << 24)
+#define WEAPON_SOUND_VARIANT(variant) (((unsigned)(variant)) << 24)
 
 /// Slots of a weapon's sound bank (the entry byte of `SOUND_WEAPON`) that the player code plays for whichever
 /// weapon is equipped (`SOUND_WEAPON(0, slot)` with the weapon ORed into the bank bits), and the shot that most

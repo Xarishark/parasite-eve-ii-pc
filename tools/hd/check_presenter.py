@@ -49,10 +49,16 @@ def main():
         results[case]=dict(native_differences=int(match[1]),width=int(match[2]),height=int(match[3]))
         return output
     baseline=run('baseline',0)
+    nativeWide=run('native-wide',1)
+    assert results['native-wide']['width']>results['baseline']['width']*1.3
+    with Image.open(nativeWide) as image:
+        for x in [0,image.width-1]:
+            assert image.crop((x,0,x+1,image.height)).getbbox() is None
+    assert run('native-wide-buffer272',1,buffer_y=272).read_bytes()==nativeWide.read_bytes()
     hd=run('hd',0,pack);wide=run('wide',1,pack)
     reload=run('reload',1,pack,reload=True)
     for suffix in ['disabled','missing']:
-        assert Path(str(reload)+'.'+suffix+'.ppm').read_bytes()==baseline.read_bytes(),suffix
+        assert Path(str(reload)+'.'+suffix+'.ppm').read_bytes()==nativeWide.read_bytes(),suffix
     for suffix in ['reenabled','restored','same-folder']:
         assert Path(str(reload)+'.'+suffix+'.ppm').read_bytes()==wide.read_bytes(),suffix
     assert (root/'reload.log').read_text().count('[background] loaded ')==4
@@ -87,9 +93,9 @@ def main():
             with Image.open(directory/imageName) as image:
                 image=image.convert('RGBA');image.putpixel((2,2),(192,64,128,0));image.save(directory/imageName)
         (directory/metaName).write_bytes(data)
-        assert run(case,1,directory).read_bytes()==baseline.read_bytes(),case
+        assert run(case,1,directory).read_bytes()==nativeWide.read_bytes(),case
     (root/'report.json').write_text(json.dumps(dict(passed=True,cases=results),indent=2)+'\n')
-    print('PASS: original native pixels, HD material, full 16:9 coverage, live pack disable/reload, safe 1x fallback, eight malformed-pack fallbacks')
+    print('PASS: original native pixels, HD material, full 16:9 coverage, live pack disable/reload, native 16:9 with black sides, safe 1x fallback, eight malformed-pack fallbacks')
 
 
 if __name__=='__main__':main()

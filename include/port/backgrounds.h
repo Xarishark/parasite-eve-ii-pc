@@ -20,6 +20,7 @@ typedef struct {
     uint32_t model_count;
     int models_complete;
     uint32_t anim_frame,frame_count,loop_count,loop_ticks,random_lcg,random_bios;
+    uint32_t ui_frame; /* Opt-in completed UI frames; never a settled field capture. */
     uint32_t player_parts;
     uint64_t player_pose_hash,player_composed_hash,view_hash;
     int player_root_valid;
@@ -35,7 +36,8 @@ void peBackgroundSubmitOt(const void* head,int allow_staging);
  * Empty path or enabled=0 restores the original image. Returns 0 for bad input. */
 int peBackgroundConfigurePack(const char* path,int enabled);
 
-/* Saved user preference; actual widescreen requires reviewed artwork coverage. */
+/* Saved user preference. The presenter supplies extended artwork or a native
+ * image plane with black sides; unsupported frames retain classic rendering. */
 void peBackgroundSetWidescreen(int enabled);
 int peBackgroundGetWidescreen(void);
 /* Call before drawing a frame. A missing/narrow span keeps original rendering.

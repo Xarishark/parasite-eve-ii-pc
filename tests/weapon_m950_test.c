@@ -5,6 +5,7 @@
 #include "gameplay/room_effects.h"
 #include "gameplay/scene_runtime.h"
 #include "gameplay/world_coords.h"
+#include "main/scratch.h"
 #include "main/mc_types.h"
 #include "main/session_types.h"
 #include "main/task_types.h"
@@ -37,6 +38,8 @@ void worldCoordPlaySound(const GfxCoord* c, s32 e, s32 n) { note("sound"); }
 int main(void)
 {
     static GameActor actor; static Task player, equip; static TmdObject model, equipModel; static GfxCoord coords[4], equipCoords[4];
+    /* The attack states reserve scratch blocks; the game initializes the cursor before use (gamemain.c). */
+    _scratchStackSetCursor(SCRATCH_STACK_CURSOR_SLOT);
     memset(trace, 0, sizeof trace);
     player.work = &actor; player.extra.tmd = &model; model.coords = coords;
     equip.extra.tmd = &equipModel; equipModel.coords = equipCoords;

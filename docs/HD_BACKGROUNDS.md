@@ -1,14 +1,18 @@
 # HD and widescreen backgrounds: implementation in progress
 
-**Disabled in normal builds.** Until the artwork is ready, the options, command-line flags and
-`PE2_HD_BACKGROUNDS` exist only in builds configured with `-DPE2_HD_BACKGROUNDS=ON`; the tools under
-`tools/hd/` need such a build. Other builds always draw the native 4:3 backgrounds and keep saved choices.
+**Widescreen work resumed, 2026-11-10.** Aspect selection and `--widescreen 0|1`
+are available independently of experimental artwork packs. The GPU presenter at
+2x+ can re-present the original MDEC image centred in 16:9 with black side
+regions. No additional artwork is required or generated. Pack controls and
+`PE2_HD_BACKGROUNDS` still require `-DPE2_HD_BACKGROUNDS=ON`. Native 1x, software
+rendering and unsupported transition frames retain the original 4:3 path.
+The historical validation below predates this change unless explicitly stated.
 
 The target is optional authored HD backgrounds with horizontally extended artwork,
 using the existing PsyZ sprite-atlas presenter. The original 320x240 camera,
 models, native image pixels, timing and foreground masks remain authoritative.
-Only a fully covered extended background may activate 16:9. Missing or unreviewed
-artwork must retain the original, centred 4:3 image. Square pixels remains an
+Without extended artwork, the temporary 16:9 path fills the sides with black
+and preserves the original centred background. Square pixels remains an
 independent existing option.
 
 ## Current verification status
@@ -35,7 +39,8 @@ The Graphics page cycles Classic 4:3 / Square pixels / Widescreen (16:9).
 `--widescreen 0|1` overrides the saved `widescreen` preference; invalid, missing
 or duplicate values fail before launch. The preference persists in settings.ini.
 It is separate from the renderer's effective widescreen state. The coverage gate
-only enables widescreen for complete centred artwork at least 428 pixels wide;
+only enables widescreen for a centred plane at least 428 pixels wide (artwork
+or the temporary native-image plane with black sides);
 unsupported backends and narrower spans fall back to original rendering.
 Select a pack folder with Graphics > Background pack, then use Graphics >
 HD backgrounds to switch it off/on. Both choices persist in settings.ini.
@@ -2371,3 +2376,62 @@ neither completed broad report supplies latest-code whole-game approval.
 
 Work remains on local main. No push is authorized by the handoff. Do not commit
 hd_handoff.md, modify PsyZ, or publish local source captures.
+
+
+## Native-background widescreen (2026-11-10)
+
+Normal builds expose Graphics → Aspect ratio → Widescreen (16:9), persist the
+choice and accept `--widescreen 0|1`. `--no-hd-backgrounds` is also available
+without enabling experimental pack support. Selecting wide preserves an existing
+2x–8x detail setting and raises 1x to 2x; returning to classic permits 1x again.
+Software rendering and unsupported/native-feedback frames use classic 4:3.
+
+The port re-presents the original MDEC image in the display plane, with black
+side cells rather than invented scenery. Models may occupy the wider view.
+The native-reference plane preserves opaque RGB555 zero. A temporary atlas file
+is removed after upload, including after a partial save failure. Only one live
+background atlas is retained. The local PsyZ checkout adds an opt-in
+`Psyz_VideoSetWidescreenDisplayOnly` switch: native rasterization retains original
+positions, clipping and blend-copy bounds while the display target is widened.
+Existing clients keep its default behavior. Startup configuration does not
+initialize the GPU/window, and the scale getter exposes pending settings before
+platform initialization, so selecting wide cannot silently reduce saved 4x.
+
+Completed retail UI frames have a separate diagnostic:
+`PE2_CAPTURE_UI_FRAME=20 PE2_CAPTURE_OUTPUT=/private/output`. It counts completed
+buffers while `uiOpen` is true and writes `pe2-ui-frame-checkpoint-v1`, with a
+separate `ui_frame` count and no field background identity. It cannot satisfy a
+settled static-view gate. Pad-poll screenshots alone may still show the earlier
+world image during a menu handoff. The read-only replay checkpoint tool also
+supports `--backend gpu` and reports display ownership and menu-hold state.
+
+Reproducible scoped checks with local USA disc images:
+
+```sh
+venv/bin/python tools/hd/check_native_widescreen.py \
+  --disc rom/image/SLUS-01042.cue --disc2 rom/image/SLUS-01055.cue
+venv/bin/python tools/hd/check_native_ui.py \
+  --disc rom/image/SLUS-01042.cue --disc2 rom/image/SLUS-01055.cue
+```
+
+macOS/Metal evidence is private under `build-hd-study/widescreen-20261110/`:
+
+- `final-static`: gallery view 8 and fire-escape view 6 produce 1707x960 versus
+  1280x960, with equal whole native VRAM, simulation state and model poses.
+- `ui-verified`: completed inventory and map buffers stay 1280x960, with exact
+  classic/wide pixel, whole-VRAM and simulation equality. Both were visually
+  reviewed. These supersede the earlier menu-timed attempts.
+- `final-transitions`: controller travel from gallery view 10 to 11/12
+  preserves GPU inputs, VRAM and simulation; early/final wide frames stay 16:9.
+- `final-feedback`: MIST R18 checkpoints 1292/1304/1310 retain classic
+  presentation during native feedback; 1340 resumes wide. All four retain
+  identical native VRAM and GPU inputs.
+- `final-presenter` and `scales`: synthetic native/HD controls, both buffers,
+  reloads, malformed packs, safe low-level 1x fallback and scales 2–8 pass.
+- `final-software`: gallery view 8 retains exact classic/wide pixels and VRAM
+  under the unsupported software renderer.
+
+The 53 C host tests and normal-build settings painter checks pass. These are
+scoped controls for the native widescreen implementation, not whole-game or
+physical Windows/Linux GPU certification. Production extended artwork and the
+broader historical HD distribution/artwork work remain separate unfinished work.

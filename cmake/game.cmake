@@ -253,7 +253,7 @@ target_include_directories(parasite-eve-ii-pc PRIVATE include include/decomp src
 target_compile_definitions(parasite-eve-ii-pc PRIVATE __psyz SKIP_ASM)
 target_link_libraries(parasite-eve-ii-pc PRIVATE psyz)
 target_sources(parasite-eve-ii-pc PRIVATE src/port/spu_voice_attributes.c)
-option(PE2_HD_BACKGROUNDS "Show the unfinished HD background and widescreen options" OFF)
+option(PE2_HD_BACKGROUNDS "Show the experimental HD background pack options" OFF)
 if(PE2_HD_BACKGROUNDS)
     target_compile_definitions(parasite-eve-ii-pc PRIVATE PE2_HD_BACKGROUNDS_ENABLED=1)
 endif()

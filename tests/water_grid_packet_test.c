@@ -5,7 +5,7 @@
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"line %d: %s\n",__LINE__,#x);exit(1);}} while(0)
 int main(void)
 {
-    _Actor403600GridQuad quad;OT_TYPE head={0};memset(&quad,0xa5,sizeof quad);
+    _Actor403600GridQuad quad;P_TAG head;memset(&head,0,sizeof head);memset(&quad,0xa5,sizeof quad);
     CHECK(sizeof quad==sizeof(POLY_FT4));
     CHECK(offsetof(_Actor403600GridQuad,vertex0)==offsetof(POLY_FT4,x0));
     CHECK(offsetof(_Actor403600GridQuad,vertex1)==offsetof(POLY_FT4,x1));

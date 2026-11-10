@@ -238,7 +238,7 @@ static void preparePack(uint64_t key)
      * Missing/animated unmodified sources do not force an idle GPU wait. */
     if(packAvailable)Psyz_GpuResetSpriteAtlases();
     packAvailable=foregroundAvailable=0;
-    if(!*packRoot)return;
+    if(!packEnabled || !*packRoot)return;
     char path[4352];
     int n=snprintf(path,sizeof path,"%s/%016" PRIx64 ".pe2bg",packRoot,key);
     if(n<0 || n>=(int)sizeof path)return;
@@ -293,6 +293,47 @@ static void preparePack(uint64_t key)
     fprintf(stderr,"[foreground] loaded %u sources, %u cells\n",foregroundPack.count,foregroundPack.cells);
 }
 
+/* Re-present an unmodified MDEC image in the wide display plane. There is
+ * deliberately no scenery in the side columns. The reference plane keeps
+ * native VRAM authoritative, including opaque RGB555 zero backgrounds. */
+static void prepareNativePack(uint64_t key)
+{
+    if(packAvailable)return;
+    if(Psyz_VideoSetWidescreen(1)!=0)return;
+    Psyz_VideoSetWidescreen(0);
+    enum { columns=28, cells=columns*15, rows=(cells+15)/16, width=16*68, height=rows*136 };
+    SDL_Surface* atlas=SDL_CreateSurface(width,height,SDL_PIXELFORMAT_RGBA32);
+    if(!atlas)return;
+    SDL_memset(atlas->pixels,0,(size_t)atlas->pitch*height);
+    for(unsigned cell=0;cell<cells;cell++) {
+        int x=(int)(cell%columns)*16-64,y=(int)(cell/columns)*16;
+        for(int plane=0;plane<2;plane++)for(int v=0;v<68;v++)for(int u=0;u<68;u++) {
+            int px=(u<2?0:u>65?63:u-2)/4;
+            int py=(v<2?0:v>65?63:v-2)/4;
+            unsigned char* dst=(unsigned char*)atlas->pixels+
+                (cell/16*68+v+plane*rows*68)*atlas->pitch+(cell%16*68+u)*4;
+            uint16_t word=x>=0 && x<320?nativeRows[(y+py)*320+x+px]:0;
+            for(int c=0;c<3;c++)dst[c]=((word>>(c*5))&31)*255/31;
+            dst[3]=!plane || (x>=0 && x<320)?255:0;
+        }
+    }
+    /* The public atlas API takes a filename. Use a private temporary file,
+     * remove it immediately after upload, and never install a generated pack. */
+    const char* directory=SDL_GetPrefPath("parasite-eve","parasite-eve-ii");
+    char path[4352];
+    int n=directory?snprintf(path,sizeof path,"%snative-wide-%" PRIu64 ".png",directory,SDL_GetTicksNS()):-1;
+    int loaded=0;
+    if(n>0 && n<(int)sizeof path) {
+        if(SDL_SavePNG(atlas,path))loaded=Psyz_GpuLoadSpriteAtlas(key,path)==1;
+        remove(path); /* Also remove a partial file after a failed save. */
+    }
+    SDL_DestroySurface(atlas);
+    if(loaded) {
+        currentPack=(PeBackgroundPack){.key=key,.left=-64,.right=384,.cells=cells};
+        packAvailable=1;
+    }
+}
+
 void peBackgroundDraw(const void* source,int columns,int buffer_y,int offset_y)
 {
     materialPresented=0;
@@ -307,7 +348,7 @@ void peBackgroundDraw(const void* source,int columns,int buffer_y,int offset_y)
         packAvailable=foregroundAvailable=0;previousKey=0;packDirty=0;
     }
     /* Cropped transitions and movies do not claim static full-frame coverage. */
-    if(!source || offset_y || (!(packEnabled && *packRoot) && !getenv("PE2_DUMP_BACKGROUNDS") && !getenv("PE2_DUMP_FRAME") && !getenv("PE2_SURVEY_TARGET") && !getenv("PE2_CAPTURE_FRAME_COUNT"))) {
+    if(!source || offset_y || (!peBackgroundGetWidescreen() && !(packEnabled && *packRoot) && !getenv("PE2_DUMP_BACKGROUNDS") && !getenv("PE2_DUMP_FRAME") && !getenv("PE2_SURVEY_TARGET") && !getenv("PE2_CAPTURE_FRAME_COUNT"))) {
         peBackgroundSetCoverage(buffer_y,0,320);return;
     }
     uint64_t key=peBackgroundCopyNative(nativeRows,source,columns);
@@ -317,8 +358,9 @@ void peBackgroundDraw(const void* source,int columns,int buffer_y,int offset_y)
     if(observedKey!=key) {dumpNative(key);observedKey=key;}
     /* PsyZ's material plane is display-only above native resolution. At 1x,
      * enabling wide without that plane would expose an unsqueezed LoadImage. */
-    if(nativeFrameRequired || !packEnabled || Psyz_VideoGetInternalResolution()<2) {peBackgroundSetCoverage(buffer_y,0,320);return;}
+    if(nativeFrameRequired || Psyz_VideoGetInternalResolution()<2) {peBackgroundSetCoverage(buffer_y,0,320);return;}
     preparePack(key);
+    if(!packAvailable && peBackgroundGetWidescreen())prepareNativePack(key);
     if(!packAvailable) { peBackgroundSetCoverage(buffer_y,0,320);return; }
     int wide=peBackgroundSetCoverage(buffer_y,currentPack.left,currentPack.right);
     DRAWENV saved;
@@ -394,6 +436,8 @@ void peBackgroundEndFrame(int buffer_y,int field_frame,unsigned game_tick,unsign
         const char* output=getenv("PE2_SURVEY_OUTPUT");
         const char* settle=getenv("PE2_SURVEY_SETTLE_FRAMES");
         const char* checkpoint=getenv("PE2_CAPTURE_FRAME_COUNT");
+        const char* uiCheckpoint=getenv("PE2_CAPTURE_UI_FRAME");
+        if(!checkpoint)checkpoint=uiCheckpoint;
         const char* checkpointOutput=getenv("PE2_CAPTURE_OUTPUT");
         const char* captureTarget=getenv("PE2_CAPTURE_TARGET");
         if(settle) {char* end;long value=strtol(settle,&end,10);if(*settle && !*end && value>=30 && value<=36000)settleFrames=(int)value;}
@@ -410,7 +454,7 @@ void peBackgroundEndFrame(int buffer_y,int field_frame,unsigned game_tick,unsign
                     fprintf(stderr,"[capture] invalid PE2_CAPTURE_TARGET; checkpoint disabled\n");
                 } else {
                     checkpointTargetPresent=captureTarget!=NULL;
-                    checkpointFrame=(unsigned)value;strcpy(root,checkpointOutput);enabled=2;
+                    checkpointFrame=(unsigned)value;strcpy(root,checkpointOutput);enabled=uiCheckpoint?3:2;
                 }
             }
         }
@@ -418,10 +462,11 @@ void peBackgroundEndFrame(int buffer_y,int field_frame,unsigned game_tick,unsign
     }
     if(!enabled)return;
     PeBackgroundFrameInfo info={0};
-    if(enabled==2) {
-        if(!simulation || simulation->frame_count!=checkpointFrame ||
-           !peBackgroundGetFrameInfo(buffer_y,&info) ||
+    if(enabled==2 || enabled==3) {
+        if(!simulation || (enabled==3?simulation->ui_frame:simulation->frame_count)!=checkpointFrame ||
+           (enabled!=3 && !peBackgroundGetFrameInfo(buffer_y,&info)) ||
            (checkpointTargetPresent && !peBackgroundCaptureMatchesTarget(&checkpointTarget,&info)))return;
+        if(enabled==3)memcpy(info.location,location,sizeof location);
         matchingFrames=0;
     } else {
         if(!field_frame || !simulation || !peBackgroundGetFrameInfo(buffer_y,&info) ||
@@ -455,13 +500,14 @@ void peBackgroundEndFrame(int buffer_y,int field_frame,unsigned game_tick,unsign
     if(gpuAuditEnabled==1 && !writeGpuAudit(root,buffer_y,&info))exit(2);
     snprintf(path,sizeof path,"%s/report.json",root);file=fopen(path,"w");if(!file)exit(2);
     fprintf(file,"{\"format\":\"%s\",\"matched_frames\":%d,\"key\":\"%016" PRIx64 "\",\"location\":[%d,%d,%d,%d,%d,%d],\"width\":%d,\"height\":%d,\"buffer_y\":%d,\"foreground_replacements\":%u,\"draw_frame\":%u,\"game_tick\":%u,\"vsync_count\":%u,\"simulation_state\":{\"anim_frame\":%u,\"frame_count\":%u,\"loop_count\":%u,\"loop_ticks\":%u,\"random_lcg\":%u,\"random_bios\":%u},\"player_root\":",
-            enabled==2?"pe2-frame-checkpoint-v1":"pe2-static-view-survey-v3",matchingFrames,info.key,info.location[0],info.location[1],info.location[2],info.location[3],info.location[4],info.location[5],w,h,buffer_y,foregroundDrawn,drawFrameIndex,game_tick,vsync_count,
+            enabled==3?"pe2-ui-frame-checkpoint-v1":enabled==2?"pe2-frame-checkpoint-v1":"pe2-static-view-survey-v3",matchingFrames,info.key,info.location[0],info.location[1],info.location[2],info.location[3],info.location[4],info.location[5],w,h,buffer_y,foregroundDrawn,drawFrameIndex,game_tick,vsync_count,
             simulation->anim_frame,simulation->frame_count,simulation->loop_count,simulation->loop_ticks,simulation->random_lcg,simulation->random_bios);
     if(simulation->player_root_valid) {
         fputc('[',file);
         for(unsigned i=0;i<12;i++)fprintf(file,"%s%" PRId32,i?",":"",simulation->player_root[i]);
         fputc(']',file);
     } else fputs("null",file);
+    fprintf(file,",\"ui_frame\":%u",simulation->ui_frame);
     fprintf(file,",\"player_pose\":{\"parts\":%u,\"local\":\"%016" PRIx64 "\",\"composed\":\"%016" PRIx64 "\",\"view\":\"%016" PRIx64 "\"},",
         simulation->player_parts,simulation->player_pose_hash,simulation->player_composed_hash,simulation->view_hash);
     fprintf(file,"\"models_complete\":%s,\"models\":[",simulation->models_complete?"true":"false");

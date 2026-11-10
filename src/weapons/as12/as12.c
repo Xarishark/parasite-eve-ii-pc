@@ -89,7 +89,7 @@ void as12AttackState(Task* playerTask)
                                     WEAPON_SOUND_VARIANT(gPlayerStatus.weaponSlotItem - SHOTGUN_ROUND_FIRST) | AS12_SOUND(SHOTGUN_SOUND_SLOT_SHOT), 1);
                 effectSpawn(EFFECT_SHOTGUN_MUZZLE_FLASH,
                             actor->equipmentTasks[1]->extra.tmd->coords,
-                            (gPlayerStatus.weaponSlotItem << AS12_EFFECT_AMMUNITION_SHIFT) | WEAPON_INDEX_AS12, NULL);
+                            ((unsigned)gPlayerStatus.weaponSlotItem << AS12_EFFECT_AMMUNITION_SHIFT) | WEAPON_INDEX_AS12, NULL);
                 playerActorResetChildSlots(playerTask, PLAYER_ANIMATION_FIRE);
                 break;
             case AS12_PHASE_IMPACT:

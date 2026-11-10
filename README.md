@@ -11,7 +11,7 @@ PlayStation runtime library (Psy-Q) on top of SDL3. It follows the architecture 
 
 ## Status
 
-**Pre-alpha.** The [0.3.1-alpha release](https://github.com/khasinski/parasite-eve-ii-pc/releases/tag/0.3.1) has downloads for macOS (Apple silicon, signed and notarized), Linux (x86-64 and ARM64) and Windows (experimental), plus a save editor. The game boots from your disc images and plays the
+**Pre-alpha.** The [0.3.3-alpha release](https://github.com/khasinski/parasite-eve-ii-pc/releases/tag/0.3.3) has downloads for macOS (Apple silicon, signed and notarized), Linux (x86-64 and ARM64) and Windows (experimental), plus a save editor. The game boots from your disc images and plays the
 opening movie, the title screen and New Game. Recorded New Game input reaches the Acropolis helicopter landing pad,
 including No. 9 combat and transformer damage. Native gameplay and save/reload have since been exercised through Dryfield and into the Shelter Laboratory on macOS; later story progression remains unverified.
 
@@ -20,7 +20,7 @@ Known limits:
 - All five stages are linked and load (Akropolis, Dryfield, Dryfield by night, the mine, the Shelter / Neo Ark; the last two need disc 2), with native progression exercised into the Shelter Laboratory on macOS. Attract demos are disabled.
 - Audio, movies and saves are incomplete.
 - Played on macOS (arm64) only. The Linux ARM64 build was started with both discs on Ubuntu 24.04 and renders; Linux x86-64 and Windows are built in CI but not run on a real PC yet.
-- The host menu has Graphics (detail, aspect, dithering, geometry correction, fullscreen, antialiasing, model filtering, smooth lighting), Controls, Audio and Discs pages; widescreen and HD backgrounds are in development and off in release builds (see [HD backgrounds](docs/HD_BACKGROUNDS.md)). Frame interpolation and mods are not there yet.
+- The host menu has Graphics (detail, aspect, dithering, geometry correction, fullscreen, antialiasing, model filtering, smooth lighting), Controls, Audio and Discs pages; widescreen selection is available; HD background packs remain experimental (see [HD backgrounds](docs/HD_BACKGROUNDS.md)). Frame interpolation and mods are not there yet.
 
 ## What you need
 
@@ -54,10 +54,17 @@ preferences folder, rewritten on each start: `~/Library/Application Support/para
 `~/.local/share/parasite-eve/parasite-eve-ii/` on Linux. Attach that file to a bug report. `PE2_LOG=<file>` writes the
 log to a file of your choice.
 
-HD backgrounds and widescreen are unfinished and are off in normal builds: the game always draws the original
-backgrounds in 4:3. To work on them, configure with `-DPE2_HD_BACKGROUNDS=ON`, which adds the Widescreen choice and the
-HD background rows to Graphics and the `--widescreen 0|1`, `--hd-backgrounds /path/to/pack` and `--no-hd-backgrounds`
-options; see [HD backgrounds](docs/HD_BACKGROUNDS.md) for the format and current limits.
+Graphics → Aspect ratio offers Classic 4:3, Square pixels and Widescreen (16:9).
+`--widescreen 0|1` overrides the saved preference in normal builds as well.
+Use `--widescreen 1 --no-hd-backgrounds` to select native backgrounds explicitly.
+On the GPU renderer, scenes without an extended background use the original
+centred image with black side regions; models can occupy the wider view. No
+scenery is generated. Selecting widescreen sets Picture detail to at least 2x.
+Software rendering and native feedback/unsupported transition frames retain
+4:3. Experimental artwork
+packs still require `-DPE2_HD_BACKGROUNDS=ON`, which adds the HD background rows
+and `--hd-backgrounds /path/to/pack`. See
+[HD backgrounds](docs/HD_BACKGROUNDS.md) for the format and current limits.
 `tools/ci/check_host_casts.sh [build-dir]` re-runs the game sources with the pointer/int cast warnings the build otherwise hides (`-w`); it must report none.
 
 **Contributors:** the layout sources are committed and the extraction tooling (splat split, `ninja_config.py`, disc

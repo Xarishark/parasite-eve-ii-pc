@@ -89,7 +89,12 @@ int main(int argc, char** argv) {
     }
     if (getenv("PE2_DEBUG_PORT")) { /* development: PsyZ HTTP debug server on 127.0.0.1 (/screenshot, /vram, /input) */
         extern int Psyz_DebugServer(int);
-        fprintf(stderr, "[debug] server on port %d\n", Psyz_DebugServer(atoi(getenv("PE2_DEBUG_PORT"))));
+        int debugPort = atoi(getenv("PE2_DEBUG_PORT"));
+        if (debugPort <= 0 || debugPort > 65535) {
+            fprintf(stderr, "[debug] ignoring invalid PE2_DEBUG_PORT: %s\n", getenv("PE2_DEBUG_PORT"));
+        } else {
+            fprintf(stderr, "[debug] server on port %d\n", Psyz_DebugServer(debugPort));
+        }
     }
     ResetGraph(0);
     gameMainRun();

@@ -59,14 +59,19 @@ static char logPath[4096];
 static int logToFile, stderrIsTerminal;
 static char hdPackPath[4096];
 static int hdEnabled=1;
-/* HD backgrounds and the widescreen they make possible are unfinished: a normal build hides them and always draws
- * the native backgrounds. Configure with -DPE2_HD_BACKGROUNDS=ON to work on them. Saved choices are kept. */
+/* Artwork packs remain experimental. Aspect-ratio selection is available
+ * independently, including the native-background fallback. */
 #ifdef PE2_HD_BACKGROUNDS_ENABLED
 enum { HD_FEATURES=1 };
 #else
 enum { HD_FEATURES=0 };
 #endif
-static int savedWidescreen; /* the saved choice, written back unchanged while HD_FEATURES is off */
+
+/* Copies a path, always NUL-terminates, and reports truncation instead of silently cutting. */
+static void copyPath(char* dst,size_t cap,const char* src) {
+    int length=snprintf(dst,cap,"%s",src);
+    if(length<0||(size_t)length>=cap) fprintf(stderr,"[paths] truncated: %s\n",src);
+}
 static int requiredDisc, selectedDisc;
 static const char* const pages[]={"Graphics","Controls","Audio","Discs"};
 static const char* const buttons[]={"L2","R2","L1","R1","Triangle","Circle","Cross","Square",
@@ -93,8 +98,11 @@ static void ensureRowVisible(void) {
 static void setPage(int page) { s_overlayState.page=page;s_overlayState.row=0;s_overlayState.scroll=0; }
 
 static void applyWidescreen(int enabled) {
-    enabled=enabled && HD_FEATURES;
-    if(enabled)Psyz_VideoSetAspectMode(PSYZ_ASPECT_DISPLAY);
+    if(enabled) {
+        Psyz_VideoSetAspectMode(PSYZ_ASPECT_DISPLAY);
+        /* Native VRAM stays independent from the wide display plane at 2x+. */
+        if(Psyz_VideoGetInternalResolution()<2)Psyz_VideoSetInternalResolution(2);
+    }
     peBackgroundSetWidescreen(enabled);
 }
 
@@ -105,7 +113,7 @@ static void saveOptions(void) {
     if(!f) { snprintf(statusText,sizeof statusText,"Could not save preferences."); return; }
     fprintf(f,"disc1=%s\ndisc2=%s\nscale=%u\naspect=%d\nwidescreen=%d\ndither=%d\ngeometry=%d\naa=%d\nfilter=%d\nlight=%d\nvolume=%u\n",
         discPaths[0],discPaths[1],Psyz_VideoGetInternalResolution(),Psyz_VideoGetAspectMode(),
-        HD_FEATURES?peBackgroundGetWidescreen():savedWidescreen,
+        peBackgroundGetWidescreen(),
         Psyz_VideoGetDitheringMode(),Psyz_VideoGetGeometryCorrection(),Psyz_VideoGetAntialiasing(),
         Psyz_VideoGetModelFiltering(),Psyz_VideoGetDynamicLighting(),Psyz_AudioGetOutputVolume());
     fprintf(f,"hd_backgrounds=%d\nhd_background_path=%s\n",hdEnabled,hdPackPath);
@@ -127,11 +135,11 @@ static void loadOptions(void) {
         line[strcspn(line,"\r\n")]=0;
         char* eq=strchr(line,'='); if(!eq)continue; *eq++=0;
         if(!strcmp(line,"disc1")||!strcmp(line,"disc2")) {
-            if(strlen(eq)<sizeof discPaths[0]) strcpy(discPaths[line[4]-'1'],eq);
+            copyPath(discPaths[line[4]-'1'],sizeof discPaths[0],eq);
             continue;
         }
         if(!strcmp(line,"hd_background_path")) {
-            if(strlen(eq)<sizeof hdPackPath)strcpy(hdPackPath,eq);
+            copyPath(hdPackPath,sizeof hdPackPath,eq);
             continue;
         }
         char* end; long n=strtol(eq,&end,10); if(end==eq || *end)continue;
@@ -150,9 +158,9 @@ static void loadOptions(void) {
             if(!*last && index>=0 && index<16 && n>=0 && n<SDL_SCANCODE_COUNT)
                 Psyz_SetKeyboardBinding_SDL3(index,(SDL_Scancode)n);
         }
+        else fprintf(stderr,"[settings] ignored unknown key: %s\n",line);
     }
     fclose(f);
-    savedWidescreen=widescreen;
     applyWidescreen(widescreen);
 }
 
@@ -236,7 +244,7 @@ static int preparePath(const char* path,char out[4096]) {
         if(failed)snprintf(statusText,sizeof statusText,"Cannot write %s: %s.",out,strerror(errno));
         return !failed;
     }
-    if(discPathIsAbsolute(path))strcpy(out,path);
+    if(discPathIsAbsolute(path))copyPath(out,4096,path);
     else {
         char* directory=SDL_GetCurrentDirectory();
         int length=snprintf(out,4096,"%s%s",directory?directory:"",path);
@@ -249,7 +257,7 @@ static int preparePath(const char* path,char out[4096]) {
 static int acceptPath(const char* path,int expected) {
     char cue[4096]; if(!preparePath(path,cue))return 0;
     PeDisc* d=peDiscOpen(cue); int number=peDiscNumber(d); peDiscClose(d);
-    if(!number || (expected && number!=expected)) {
+    if(!number || number<1 || number>2 || (expected && number!=expected)) {
         FILE* probe=fopen(path,"rb");
         if(!probe)snprintf(statusText,sizeof statusText,"Cannot open %s: %s.",path,strerror(errno));
         else {
@@ -267,10 +275,10 @@ static int acceptPath(const char* path,int expected) {
             fprintf(stderr,"[disc] %s\n",statusText);
             return 0;
         }
-        strcpy(cue,stable);
+        copyPath(cue,sizeof cue,stable);
     }
     fprintf(stderr,"[disc] USA Disc %d: %s\n",number,path);
-    strcpy(discPaths[number-1],cue);
+    copyPath(discPaths[number-1],sizeof discPaths[0],cue);
     snprintf(statusText,sizeof statusText,"USA Disc %d configured.",number);
     return number;
 }
@@ -327,7 +335,7 @@ static void chooseBackgroundPack(SDL_Window* window) {
            !peBackgroundConfigurePack(d.paths[0],1))
             snprintf(statusText,sizeof statusText,"Choose an available background pack folder.");
         else {
-            strcpy(hdPackPath,d.paths[0]);hdEnabled=1;
+            copyPath(hdPackPath,sizeof hdPackPath,d.paths[0]);hdEnabled=1;
             snprintf(statusText,sizeof statusText,"Pack selected; missing artwork uses the original image.");
         }
     }
@@ -372,7 +380,7 @@ static void paintPanel(OverlaySurface* surface,OverlayLayout* layout) {
     float s=layout->scale;
     FillRoundRect(surface,0,0,680*s,(surface->h-1),16*s,kPanel);
     DrawText(surface,32*s,42*s,24*s,"PARASITE EVE II",kText,ALIGN_LEFT);
-    DrawText(surface,648*s,42*s,14*s,"0.3.1 alpha",kMuted,ALIGN_RIGHT);
+    DrawText(surface,648*s,42*s,14*s,"0.3.3 alpha",kMuted,ALIGN_RIGHT);
     for(int i=0;i<4;i++)DrawText(surface,(32+i*161)*s,87*s,17*s,pages[i],
         s_overlayState.page==i?kAccent:kMuted,ALIGN_LEFT);
     ensureRowVisible();
@@ -425,10 +433,10 @@ static void changeRow(int direction,int activate) {
     int r=s_overlayState.row;
     if(s_overlayState.page==0) {
         if(r==0) { int n=(int)Psyz_VideoGetInternalResolution()+direction;
-            if(n>=1&&n<=8)Psyz_VideoSetInternalResolution(n); }
+            if(n>=(peBackgroundGetWidescreen()?2:1)&&n<=8)Psyz_VideoSetInternalResolution(n); }
         if(r==1) {
             int choice=peBackgroundGetWidescreen()?2:Psyz_VideoGetAspectMode()?1:0;
-            int choices=HD_FEATURES?3:2;
+            int choices=3;
             choice=(choice+(direction<0?choices-1:1))%choices;
             applyWidescreen(choice==2);
             Psyz_VideoSetAspectMode(choice==1?PSYZ_ASPECT_SQUARE:PSYZ_ASPECT_DISPLAY);
@@ -577,9 +585,8 @@ int peHostStartup(int argc,char** argv,const char** disc) {
         else if(!strcmp(argv[i],"--validate-discs"))validateOnly=1;
         else if(!strcmp(argv[i],"--disc") && i+1<argc)explicitDisc=argv[++i];
         else if(!strcmp(argv[i],"--disc2") && i+1<argc)explicitDisc2=argv[++i];
-        else if(!HD_FEATURES && (!strcmp(argv[i],"--widescreen") || !strcmp(argv[i],"--hd-backgrounds") ||
-                                 !strcmp(argv[i],"--no-hd-backgrounds"))) {
-            fprintf(stderr,"%s: HD backgrounds and widescreen are not finished and are disabled in this build "
+        else if(!HD_FEATURES && !strcmp(argv[i],"--hd-backgrounds")) {
+            fprintf(stderr,"%s: HD background packs are experimental and disabled in this build "
                            "(configure with -DPE2_HD_BACKGROUNDS=ON).\n",argv[i]);
             return -1;
         }
@@ -595,7 +602,7 @@ int peHostStartup(int argc,char** argv,const char** disc) {
                strlen(argv[i+1])>=sizeof hdPackPath || strpbrk(argv[i+1],"\r\n")) {
                 fprintf(stderr,"Missing, invalid or duplicate --hd-backgrounds path.\n");return -1;
             }
-            hdSeen=1;hdEnabled=1;strcpy(hdPackPath,argv[++i]);
+            hdSeen=1;hdEnabled=1;copyPath(hdPackPath,sizeof hdPackPath,argv[++i]);
         }
         else if(!strcmp(argv[i],"--no-hd-backgrounds")) {
             if(hdSeen) {fprintf(stderr,"Duplicate or conflicting HD background options.\n");return -1;}
@@ -604,7 +611,7 @@ int peHostStartup(int argc,char** argv,const char** disc) {
         else if(argv[i][0]!='-' && !explicitDisc)explicitDisc=argv[i];
         else {
             fprintf(stderr,HD_FEATURES?"usage: %s [disc.cue|disc.bin] [--disc2 image] [--host-menu] [--widescreen 0|1] [--hd-backgrounds folder|--no-hd-backgrounds]\n"
-                                      :"usage: %s [disc.cue|disc.bin] [--disc2 image] [--host-menu]\n",argv[0]);
+                                      :"usage: %s [disc.cue|disc.bin] [--disc2 image] [--host-menu] [--widescreen 0|1] [--no-hd-backgrounds]\n",argv[0]);
             return -1;
         }
     }
@@ -616,7 +623,7 @@ int peHostStartup(int argc,char** argv,const char** disc) {
         if(strlen(hdEnvironment)>=sizeof hdPackPath || strpbrk(hdEnvironment,"\r\n")) {
             fprintf(stderr,"Invalid PE2_HD_BACKGROUNDS path.\n");return -1;
         }
-        strcpy(hdPackPath,hdEnvironment);hdEnabled=1;
+        copyPath(hdPackPath,sizeof hdPackPath,hdEnvironment);hdEnabled=1;
     }
     if(*hdPackPath && hdPackPath[0]!='/' && hdPackPath[0]!='\\' &&
        !(hdPackPath[0] && hdPackPath[1]==':')) {
@@ -626,7 +633,7 @@ int peHostStartup(int argc,char** argv,const char** disc) {
         if(length<0 || length>=(int)sizeof absolute) {
             fprintf(stderr,"Could not resolve background pack path.\n");return -1;
         }
-        strcpy(hdPackPath,absolute);
+        copyPath(hdPackPath,sizeof hdPackPath,absolute);
     }
     peBackgroundConfigurePack(hdPackPath,hdEnabled && HD_FEATURES);
     if(explicitDisc && acceptPath(explicitDisc,1)!=1) {peHostReportError("Disc 1: %s",statusText);return -1;}
