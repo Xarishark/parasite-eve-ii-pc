@@ -1,6 +1,6 @@
 /* A requested camera can be absent from an arriving scene stream. Exercise
  * the production wait path with no selected header and with a stale header. */
-#include "../src/main/stage.c"
+#include "../src/shared/scene/scene_image.inc.c"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,6 +20,7 @@ u8 fsUploadImageStrips(s32 mode) {(void)mode;abort();}
 int DecDCTvlc2(u_long* source,u_long* output,DECDCTTAB table) {(void)source;(void)output;(void)table;abort();}
 void DecDCTvlcBuild(u_short* table) {(void)table;abort();}
 int DecDCTvlcSize2(int size) {(void)size;abort();}
+static void _mdecImageStripCallback(void) { abort(); }
 static int resets,restores;
 void gpuResetAndInvalidateModelBuffers(void) {++resets;}
 void tmdResetAuxHeapAndRestoreBuffers(void) {++restores;}
