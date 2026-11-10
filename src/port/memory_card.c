@@ -3,6 +3,10 @@
  * Override the per-user default with PE2_MEMORY_CARD_DIR for isolated replays. */
 #include "port/memory_card.h"
 #include <libmcrd.h>
+/* The game's open modes, taken before the Windows CRT headers below redefine
+ * O_RDONLY and O_WRONLY as 0 and 1. */
+enum { CARD_READ = O_RDONLY, CARD_WRITE = O_WRONLY };
+_Static_assert(CARD_READ == 1 && CARD_WRITE == 2, "libmcrd open modes");
 #include <SDL3/SDL.h>
 #include <dirent.h>
 #include <errno.h>
@@ -323,7 +327,10 @@ long MemCardOpen(long channel, char* name, long mode)
     char path[PATH_MAX];
     long result = filePath(channel, name, path);
     if (result != McErrNone) return result;
-    if (mode != O_RDONLY && mode != O_WRONLY) return McErrCardInvalid;
+    if (mode != CARD_READ && mode != CARD_WRITE) {
+        fprintf(stderr, "[memory card] unknown open mode %ld for %s\n", mode, path);
+        return McErrCardInvalid;
+    }
     struct stat st;
     if (lstat(path, &st) != 0) return errno == ENOENT ? McErrFileNotExist : McErrCardInvalid;
     if (!S_ISREG(st.st_mode)) return McErrCardInvalid;
@@ -361,12 +368,12 @@ static int validTransfer(const void* data, long offset, long bytes)
 
 long MemCardReadData(unsigned long* data, long offset, long bytes)
 {
-    if (!started || ioState == CARD_IO_RUNNING || !openPath[0] || openMode != O_RDONLY || !validTransfer(data, offset, bytes)) return 0;
+    if (!started || ioState == CARD_IO_RUNNING || !openPath[0] || openMode != CARD_READ || !validTransfer(data, offset, bytes)) return 0;
     return complete(McFuncReadData, transfer(openPath, data, offset, bytes, 0));
 }
 long MemCardWriteData(unsigned long* data, long offset, long bytes)
 {
-    if (!started || ioState == CARD_IO_RUNNING || !openPath[0] || openMode != O_WRONLY || !validTransfer(data, offset, bytes)) return 0;
+    if (!started || ioState == CARD_IO_RUNNING || !openPath[0] || openMode != CARD_WRITE || !validTransfer(data, offset, bytes)) return 0;
     return complete(McFuncWriteData, transfer(openPath, data, offset, bytes, 1));
 }
 long MemCardWriteFile(long channel, char* name, unsigned long* data, long offset, long bytes)
