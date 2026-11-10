@@ -1,5 +1,5 @@
 /* Test the production scene-sector reader with serialized 2048-byte sectors. */
-#include "../src/gameplay/scene_runtime.c"
+#include "../src/shared/scene/scene_sector.inc.c"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

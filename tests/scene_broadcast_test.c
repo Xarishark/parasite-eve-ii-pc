@@ -1,5 +1,5 @@
 /* Exercise the production scene forwarder through both real dispatcher hops. */
-#include "../src/gameplay/scene_runtime.c"
+#include "../src/shared/scene/scene_broadcast.inc.c"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
